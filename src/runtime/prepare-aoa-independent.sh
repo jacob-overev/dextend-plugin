@@ -1,0 +1,60 @@
+#!/bin/sh
+# Dextend | Developed by Overev
+# Copyright (c) 2026 Overev | https://overev.com/
+
+# Experimental source-built AOA transport, selected explicitly by boot-live.sh.
+# Owns only ci_hdrc.1. All module and node changes are RAM-only.
+set -eu
+cd /tmp/yamaha-sdl
+diag() { [ ! -f /tmp/dextend-service/diagnostics.sh ] || sh /tmp/dextend-service/diagnostics.sh event aoa "$@" || true; }
+diag prepare_start
+trap 'rc=$?; diag "prepare_exit rc=$rc"' EXIT
+fail() {
+    diag "$*"
+    echo "AOA_INDEPENDENT ERROR: $*" >&2
+    exit 1
+}
+[ "$(uname -r)" = '3.14.52+g94d07bb' ] || fail UNKNOWN_KERNEL
+[ -f AOA.sha256 ] || fail MISSING_MODULE_MANIFEST
+sha256sum -c AOA.sha256 >/dev/null || fail MODULE_HASH_MISMATCH
+driver=/sys/bus/platform/drivers/ci_hdrc
+if [ -d /sys/module/yamaha_aoa ] && [ "${YAMAHA_AOA_RESET:-0}" = 1 ]; then
+    rmmod yamaha_aoa
+    [ ! -d /sys/module/yamaha_aoa ] || fail MODULE_IN_USE
+fi
+if [ ! -d /sys/module/yamaha_aoa ]; then
+    # Same vendor worker stop used by the accepted transport; the iPhone
+    # controller, network interfaces and pairing stores remain untouched.
+    killall -STOP ARMadb-driver 2>/dev/null || true
+    for pid in $(pidof ARMadb-driver 2>/dev/null || true); do
+        parent=$(awk '/^PPid:/ {print $2}' "/proc/$pid/status")
+        [ "$parent" = 1 ] || kill -KILL "$pid" 2>/dev/null || true
+    done
+    usb=/sys/class/android_usb_accessory/android0
+    [ ! -e "$usb/enable" ] || echo 0 >"$usb/enable"
+    [ ! -e "$driver/ci_hdrc.1" ] || echo ci_hdrc.1 >"$driver/unbind"
+    if [ -d /sys/module/g_android_accessory ]; then rmmod g_android_accessory; fi
+    [ ! -d /sys/module/g_android_accessory ] || fail VENDOR_MODULE_IN_USE
+    [ -e "$driver/ci_hdrc.1" ] || echo ci_hdrc.1 >"$driver/bind"
+    diag loading_module
+    insmod ./yamaha_aoa.ko experimental=1
+    diag module_loaded
+    [ -d /sys/module/yamaha_aoa ] || fail MODULE_NOT_LOADED
+fi
+if [ ! -e /dev/yamaha_aoa ]; then
+    dev=$(cat /sys/class/misc/yamaha_aoa/dev)
+    mknod /dev/yamaha_aoa c "${dev%:*}" "${dev#*:}"
+    chmod 600 /dev/yamaha_aoa
+fi
+# An unplugged CCU needs only to reconnect; do not churn the module while idle.
+count=0
+while [ "$count" -lt 45 ]; do
+    state=$(cat /sys/class/misc/yamaha_aoa/state)
+    if [ "$state" = CONFIGURED ]; then
+        echo 'AOA_INDEPENDENT READY'
+        exit 0
+    fi
+    sleep 1
+    count=$((count + 1))
+done
+fail NO_CCU_CONFIGURATION_WITHIN_45_SECONDS

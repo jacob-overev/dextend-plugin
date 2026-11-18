@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="640" viewBox="0 0 560 640" role="img" aria-labelledby="title desc"><!-- Dextend project layout and integration: Overev | https://overev.com/ -->
+<title id="title">How Dextend works</title>
+<desc id="desc">A phone connects to an adapter running Dextend, which connects to the motorcycle infotainment system over USB.</desc>
+<defs>
+ <linearGradient id="case" x2="1" y2="1"><stop stop-color="#45474c"/><stop offset="1" stop-color="#202226"/></linearGradient>
+
+ <marker id="arrow" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M2 1.5 7 5 2 8.5" fill="none" stroke="#c4363a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+
+</defs>
+<rect width="560" height="640" rx="18" fill="#fff"/>
+<g font-family="Arial, Helvetica, sans-serif">
+ <rect x="16" y="16" width="528" height="160" rx="16" fill="#fafafa" stroke="#dedfe2"/>
+ <g transform="translate(86 36)">
+  <rect x="-3" y="26" width="3" height="16" rx="1.5" fill="#7c828b"/><rect x="66" y="32" width="3" height="22" rx="1.5" fill="#7c828b"/>
+  <rect width="66" height="120" rx="12" fill="url(#case)" stroke="#626772" stroke-width="1.5"/><rect x="5" y="6" width="56" height="108" rx="8" fill="#fff"/><rect x="22" y="9" width="22" height="5" rx="2.5" fill="#25272c"/>
+  <path d="M9 60 57 33M9 84 57 58M20 23 45 107" stroke="#ececef" stroke-width="6"/>
+  <path d="M19 91V66Q19 60 25 60H39Q45 60 45 54V35" fill="none" stroke="#c4363a" stroke-width="4" stroke-linecap="round"/><circle cx="45" cy="35" r="5" fill="#c4363a" stroke="#fff" stroke-width="2"/>
+  <path d="m19 83-5 11 5-2 5 2z" fill="#ad3033" stroke="#fff" stroke-width="1.4"/><rect x="10" y="98" width="46" height="9" rx="4" fill="#f5e4e5"/><path d="M24 110h18" stroke="#545a63" stroke-width="2" stroke-linecap="round"/>
+ </g>
+ <text x="238" y="77" fill="#24262b" font-size="27" font-weight="700">Smartphone</text>
+ <text x="238" y="111" fill="#555b65" font-size="22">Apple CarPlay</text><text x="238" y="140" fill="#555b65" font-size="22">Android Auto</text>
+ <path d="M280 191V221" fill="none" stroke="#c4363a" stroke-width="2.2" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+ <rect x="16" y="236" width="528" height="160" rx="16" fill="#fff5f5" stroke="#c4363a" stroke-width="1.8"/>
+ <g id="dongle" transform="translate(0 -4)">
+ <path id="cable" d="M165 306h3q16 0 16 16v17q0 17-17 17h-12" fill="none" stroke="#45474c" stroke-width="6" stroke-linecap="round"/>
+ <rect x="162" y="302" width="9" height="8" rx="2" fill="#626772"/>
+ <rect x="44" y="276" width="122" height="60" rx="12" fill="url(#case)" stroke="#626772" stroke-width="1.5"/>
+ <rect x="49" y="281" width="112" height="50" rx="8" fill="#fff"/>
+ <rect id="plugin-bg" x="57" y="286" width="96" height="40" rx="5" fill="#f5e4e5"/>
+ <text id="plugin-type" x="105" y="301" text-anchor="middle" fill="#555b65" font-size="14">Plugin</text>
+ <text id="plugin-name" x="105" y="320" text-anchor="middle" fill="#ad3033" font-size="18" font-weight="700">Dextend</text>
+ <g id="usb">
+ <rect x="149" y="352" width="9" height="8" rx="2" fill="#626772"/>
+ <rect x="130" y="348" width="23" height="16" rx="3" fill="url(#case)" stroke="#626772" stroke-width="1.2"/><path d="M146 352v8m3-8v8" stroke="#7c828b" stroke-width="1.2"/>
+ <rect x="113" y="349" width="17" height="14" rx="1" fill="#fff" stroke="#7c828b" stroke-width="1.5"/>
+ <rect x="119" y="351" width="4" height="3" rx=".5" fill="#7c828b"/><rect x="119" y="358" width="4" height="3" rx=".5" fill="#7c828b"/>
+ </g></g>
+ <text x="238" y="302" fill="#24262b" font-size="27" font-weight="700">Adapter</text><text x="238" y="337" fill="#ad3033" font-size="22">Running</text><text x="238" y="366" fill="#ad3033" font-size="22" font-weight="700">Dextend</text>
+ <path d="M280 411V441" fill="none" stroke="#c4363a" stroke-width="2.2" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+ <rect x="16" y="456" width="528" height="168" rx="16" fill="#fafafa" stroke="#dedfe2"/>
+ <g id="motorcycle" transform="translate(44.58 490.775) scale(.153)" stroke-linecap="round" stroke-linejoin="round">
+ <!-- Housing proportions and top chamfers from the Yamaha display reference prepared for the project website. -->
+ <path d="M155 30H925Q946 30 961 47L1029 123Q1042 139 1042 161V578Q1042 620 1000 620H80Q38 620 38 578V161Q38 139 51 123L119 47Q134 30 155 30Z" fill="url(#case)" stroke="#626772" stroke-width="8"/>
+ <path d="M167 65H913Q928 65 940 80L998 145Q1009 158 1009 174V565Q1009 586 988 586H92Q71 586 71 565V174Q71 158 82 145L140 80Q152 65 167 65Z" fill="#fff"/>
+ <!-- Instrument strip above the projection area. -->
+ <path d="M183 138h99m-99 34h65" stroke="#d1d4da" stroke-width="12"/>
+ <text x="407" y="177" text-anchor="middle" font-size="76" fill="#626772">N</text>
+ <text x="636" y="183" text-anchor="middle" font-size="108" fill="#45474c">0</text>
+ <path d="M698 139h67m-67 30h44" stroke="#d1d4da" stroke-width="12"/>
+ <!-- Side gauges frame a simple map, mirroring the smartphone's navigation graphic. -->
+ <path d="M186 244v285m708-285v285" stroke="#ececef" stroke-width="20"/>
+ <path d="M186 459v70m708-216v216" stroke="#7c828b" stroke-width="20"/>
+ <rect x="246" y="221" width="588" height="320" rx="29" fill="#f6f7f9"/>
+ <path d="M259 346 682 234m-388 273 526-143M382 234l145 294m98-294 145 294" stroke="#e4e6eb" stroke-width="25"/>
+ <path d="M389 476v-81q0-25 25-25h205q26 0 26-26v-61" fill="none" stroke="#c4363a" stroke-width="22"/>
+ <circle cx="645" cy="283" r="22" fill="#c4363a" stroke="#fff" stroke-width="10"/>
+ <path d="m389 447-25 52 25-10 25 10z" fill="#ad3033" stroke="#fff" stroke-width="7"/>
+ </g>
+ <text x="238" y="517" fill="#24262b" font-size="27" font-weight="700">Motorcycle</text><text x="238" y="551" fill="#555b65" font-size="22">Infotainment</text><text x="238" y="580" fill="#555b65" font-size="22">system</text>
+</g>
+</svg>

@@ -1,0 +1,27 @@
+# Dextend | Developed by Overev | https://overev.com/
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.o
+*.ko
+*.so
+*.a
+*.map
+*.tar
+*.tar.gz
+*.tar.lzma
+*.h264
+*.png
+.env
+.env.*
+*.key
+*.pem
+
+# The diagnostic build recipe is source code.
+!src/diagnostics/build/
+
+# Corresponding upstream sources for the shipped diagnostic components.
+!src/diagnostics/build/upstream/libnl-3.11.0.tar.gz
+!src/diagnostics/build/upstream/wpa_supplicant-2.11.tar.gz

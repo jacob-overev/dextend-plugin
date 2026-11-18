@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  Dextend | Developed by Overev
+  Copyright (c) 2026 Overev | https://overev.com/
+-->
+
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dextend Updater</title>
+  <style>
+    html,
+    body,
+    iframe {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    body {
+      background: #09090b;
+      color: #e4e2df;
+      font: 16px monospace;
+    }
+    a {
+      color: #ff8589;
+    }
+    p {
+      padding: 1rem;
+    }
+  </style>
+  <p id="notice">
+    Dextend Updater ·
+    <a href="https://updater.getdextend.com" target="_blank" rel="noopener">Open / Otwórz</a
+    ><br />Sign in on the website first if needed. / W razie potrzeby zaloguj się najpierw na
+    stronie.
+  </p>
+  <iframe
+    title="Dextend Updater"
+    id="updater"
+    src="https://updater.getdextend.com/"
+    referrerpolicy="origin"
+  ></iframe>
+  <script>
+    'use strict';
+    const site = 'https://updater.getdextend.com',
+      frame = document.querySelector('iframe');
+    const api = new URL(location.href);
+    api.port = '8765';
+    api.pathname = '/';
+    api.search = '';
+    api.hash = '';
+    const paths = /^\/v1\/(info|status|log|begin|install|reboot|cancel|chunk\?offset=[0-9]{1,7})$/;
+    window.addEventListener('message', async (e) => {
+      if (
+        e.origin !== site ||
+        e.source !== frame.contentWindow ||
+        !e.data ||
+        e.data.type !== 'dextend-request'
+      )
+        return;
+      const { id, path, method, token, body } = e.data;
+      if (
+        !Number.isSafeInteger(id) ||
+        !paths.test(path) ||
+        !['GET', 'POST'].includes(method) ||
+        (body && !(typeof body === 'string' || body instanceof ArrayBuffer)) ||
+        (body && (body.byteLength || body.length) > 65536)
+      )
+        return;
+      document.querySelector('#notice').hidden = true;
+      try {
+        const headers = {};
+        if (token) headers['X-Dextend-Token'] = token;
+        const response = await fetch(new URL(path, api), {
+          method,
+          headers,
+          body: method === 'POST' ? body : undefined,
+          cache: 'no-store',
+          signal: AbortSignal.timeout(20000),
+        });
+        frame.contentWindow.postMessage(
+          { type: 'dextend-response', id, ok: response.ok, data: await response.json() },
+          site,
+        );
+      } catch {
+        frame.contentWindow.postMessage(
+          { type: 'dextend-response', id, ok: false, data: { error: 'connection' } },
+          site,
+        );
+      }
+    });
+    frame.addEventListener('load', () =>
+      frame.contentWindow.postMessage({ type: 'dextend-bridge' }, site),
+    );
+  </script>
+</html>

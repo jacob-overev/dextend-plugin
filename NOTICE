@@ -1,0 +1,25 @@
+Required Notice: Copyright (c) 2026 Overev
+
+Dextend's independently authored code and accompanying files identified as
+PolyForm-Noncommercial-1.0.0 in the source license map are made available under
+the PolyForm Noncommercial License 1.0.0.
+https://polyformproject.org/licenses/noncommercial/1.0.0
+
+The AOA driver and its module build script remain GPL-2.0-only. jsmn remains
+MIT-licensed. Other separately licensed components retain their own licenses
+and notices. This notice adds no restrictions to those licenses.
+
+This license selection does not automatically cover other repository content,
+OEM software, historical snapshots, or preserved release packages.
+
+Dextend release engineering and repository integration: Overev (https://overev.com/).
+This credit also accompanies the following files whose formats, verification
+or publication contracts require their payloads to stay intact:
+
+- VERSION, RELEASE-NOTES.json and releases/{VERSION,NOTES.json,SHA256SUMS,UPDATE.manifest,A15W_Update.img}
+- src/diagnostics/runtime/authorized_keys (service configuration)
+- src/diagnostics/build/abi-reference.json and target.symvers (ABI observations)
+- src/aoa/build-support/kernel.config and target.symvers (build and ABI reference data)
+
+Credits for project integration and artwork layout do not transfer ownership
+of upstream code, firmware, fonts or third-party marks.

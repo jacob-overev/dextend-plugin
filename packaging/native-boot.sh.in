@@ -1,0 +1,228 @@
+#!/bin/sh
+# Dextend | Developed by Overev
+# Copyright (c) 2026 Overev | https://overev.com/
+
+# Native cold-start coordinator. No firmware/configuration writes or preload.
+set -eu
+umask 077
+root=${DEXTEND_FIXTURE_ROOT:-}
+if [ -n "$root" ]; then
+    case "$root" in /*) ;; *) exit 2 ;; esac
+    [ "$root" != / ] && [ ! -L "$root" ] && [ -f "$root/.fixture" ] && [ ! -L "$root/.fixture" ] || exit 2
+    canonical=$(CDPATH= cd -- "$root" && pwd -P)
+    [ "$canonical" = "$root" ] && [ "$canonical" != / ] || exit 2
+    [ -f "$root/actions.sh" ] && [ ! -L "$root/actions.sh" ] || exit 2
+fi
+state=$root/etc/yamaha-sdl
+runtime=$root/tmp/yamaha-sdl
+work=$(mktemp -d "$root/tmp/dextend-native.XXXXXX") || exit 1
+chmod 700 "$work" || exit 1
+child=
+logging=0
+swapped=0
+socket_saved=0
+stage=verify_runtime
+diag() { [ ! -f /tmp/dextend-service/diagnostics.sh ] || sh /tmp/dextend-service/diagnostics.sh event native "$@" || true; }
+diag stage "$stage"
+note() {
+    stage=$1
+    diag stage "$@"
+    if [ "$logging" = 1 ]; then debug "native_boot $*"; else echo "NATIVE_BOOT $*"; fi
+}
+regular() { [ -f "$1" ] && [ ! -L "$1" ]; }
+action() {
+    if [ -n "$root" ]; then
+        sh "$root/actions.sh" "$@"
+        return
+    fi
+    case "$1" in
+        sleep) sleep "$2" ;;
+        kernel) uname -r ;;
+        factory-ready) [ -S /var/run/adb-driver ] && [ -d /sys/module/g_android_accessory ] &&
+            pidof ARMadb-driver >/dev/null 2>&1 ;;
+        cache-get) /usr/sbin/riddleBoxCfg -g BtAudio >/dev/null 2>&1 || true ;;
+        probe) "$runtime/receiver-native" --probe-phone-audio ;;
+        listeners) awk '$8=="/var/run/adb-driver"{n++} END{print n+0}' /proc/net/unix ;;
+        pause-factory)
+            for p in $(pidof ARMadb-driver 2>/dev/null || true) $(ps | awk '/[p]hone_link_deamon\.sh/{print $1}'); do
+                case "$p" in '' | *[!0-9]* | 0 | 1) continue ;; esac
+                if ! awk '/^State:/{exit ($2=="T"?0:1)}' "/proc/$p/status" 2>/dev/null; then
+                    kill -STOP "$p" 2>/dev/null || continue
+                    echo "$p" >>"$work/paused"
+                fi
+            done
+            for p in $(pidof ARMadb-driver 2>/dev/null || true); do
+                parent=$(awk '/^PPid:/{print $2}' "/proc/$p/status")
+                [ "$parent" = 1 ] || kill -KILL "$p" 2>/dev/null || true
+            done
+            # HiCar inherits the OEM listening socket too. Leaving it alive
+            # prevents the native receiver from ever acquiring that socket.
+            killall -KILL AppleCarPlay ARMiPhoneIAP2 ARMAndroidAuto ARMHiCar 2>/dev/null || true
+            ;;
+        resume-factory)
+            if [ -f "$work/paused" ]; then
+                while read -r p; do kill -CONT "$p" 2>/dev/null || true; done <"$work/paused"
+            fi
+            ;;
+        start)
+            if [ -f /tmp/dextend-service/diagnostics.sh ] && mkfifo -m 600 "$work/receiver.events"; then
+                sh /tmp/dextend-service/diagnostics.sh stream native <"$work/receiver.events" >/dev/null 2>&1 &
+                (
+                    cd "$runtime"
+                    setsid ./receiver-native --auto-runtime >"$work/receiver.events" 2>&1 </dev/null &
+                    echo $!
+                )
+            else
+                (
+                    cd "$runtime"
+                    setsid ./receiver-native --auto-runtime >/dev/null 2>&1 </dev/null &
+                    echo $!
+                )
+            fi
+            ;;
+        health)
+            kill -0 "$2" 2>/dev/null || return 10
+            [ -d /sys/module/yamaha_aoa ] || return 11
+            [ "$(cat "$runtime/boot.pid" 2>/dev/null)" = "$2" ] || return 12
+            workers=0
+            for p in $(ps | awk '/sh \.\/supervise-(ccu|phone|auto)\.sh/ && !/awk/{print $1}'); do
+                [ "$(awk '/^PPid:/{print $2}' "/proc/$p/status" 2>/dev/null)" != "$2" ] || workers=$((workers + 1))
+            done
+            [ "$workers" -ge 2 ] || return 13
+            ;;
+        stop)
+            case "$2" in '' | *[!0-9]* | 0 | 1) return 1 ;; esac
+            kill -TERM "-$2" 2>/dev/null || true
+            sleep 2
+            kill -KILL "-$2" 2>/dev/null || true
+            ;;
+        unload)
+            [ ! -d /sys/module/yamaha_aoa ] || rmmod yamaha_aoa
+            [ ! -d /sys/module/yamaha_aoa ]
+            ;;
+        *) return 2 ;;
+    esac
+}
+fallback() {
+    rc=$?
+    diag failed "stage=$stage" "rc=$rc"
+    trap - EXIT HUP INT TERM
+    note fallback
+    if [ -n "$child" ]; then action stop "$child" || true; fi
+    # Never start a competing baseline while the native module is still busy.
+    if ! action unload; then
+        note fallback_module_busy
+        exit 1
+    fi
+    if [ "$socket_saved" = 1 ]; then
+        [ ! -e "$root/var/run/adb-driver" ] || mv "$root/var/run/adb-driver" "$work/native.socket"
+        mv "$work/oem.socket" "$root/var/run/adb-driver" || exit 1
+    fi
+    action resume-factory || true
+    note stopped_no_historical_fallback
+    exit 1
+}
+trap fallback EXIT
+trap 'exit 1' HUP INT TERM
+note verify_kernel
+[ "$(action kernel)" = 3.14.52+g94d07bb ]
+note verify_archive
+[ "$(sha256sum "$state/native-runtime.tar.lzma" | awk '{print $1}')" = @RUNTIME_SHA256@ ]
+note unpack_runtime
+mkdir "$work/runtime"
+lzma -dc "$state/native-runtime.tar.lzma" >"$work/runtime.tar"
+[ "$(wc -c <"$work/runtime.tar")" -le 1048576 ]
+tar -xf "$work/runtime.tar" -C "$work/runtime"
+note verify_runtime_files
+(cd "$work/runtime" && sha256sum -c SHA256SUMS >/dev/null && sha256sum -c AOA.sha256 >/dev/null)
+note prepare_runtime
+chmod 600 "$work/runtime/waiting.h264" "$work/runtime/third-party/GCC-copyright.txt" \
+    "$work/runtime/third-party/GPL-3.txt" "$work/runtime/third-party/build-provenance.txt" \
+    "$work/runtime/third-party/musl-COPYRIGHT.txt"
+chmod 700 "$work/runtime"/*.sh "$work/runtime/yamaha-sdl-live" "$work/runtime/receiver-native" "$work/runtime/iphone-usb-role" "$work/runtime/bluetooth-autoconnect" "$work/runtime/phone-policy" "$work/runtime/service-key"
+[ ! -L "$runtime" ]
+if [ -e "$runtime" ]; then mv "$runtime" "$work/previous-runtime"; fi
+mv "$work/runtime" "$runtime"
+swapped=1
+if [ -z "$root" ]; then
+    # The independent service owns the USB recorder and survives native failure.
+    # A dangling link is intentional until the user inserts an opted-in drive.
+    ln -s /tmp/dextend-service/usb-debug "$runtime/usb-debug"
+    export YAMAHA_RUNTIME="$runtime"
+    . "$runtime/debug-log.sh"
+    logging=1
+fi
+
+note waiting_for_factory
+# Let the factory init, which invoked custom_init early, finish its own setup.
+i=0
+while [ "$i" -lt 45 ]; do
+    if regular "$root/etc/riddle.conf" && regular "$root/tmp/.riddle.conf" && action factory-ready; then break; fi
+    action sleep 1
+    i=$((i + 1))
+done
+if ! regular "$root/tmp/.riddle.conf"; then action cache-get; fi
+if ! regular "$root/etc/riddle.conf" || ! regular "$root/tmp/.riddle.conf"; then exit 1; fi
+action factory-ready
+note factory_ready
+probe_rc=0
+note probe_audio
+probe=$(action probe 2>/dev/null) || probe_rc=$?
+diag audio_probe_exit "rc=$probe_rc"
+if [ "$probe" != 1 ] || { [ "$probe_rc" != 0 ] && [ "$probe_rc" != 1 ]; }; then exit 1; fi
+note probe_ok
+# Exercise every private bind before stopping factory receivers.
+if [ -z "$root" ]; then
+    note probe_auto_runtime
+    if "$runtime/receiver-native" --probe-auto-runtime >"$work/probe.events" 2>&1; then
+        :
+    else
+        rc=$?
+        [ ! -f /tmp/dextend-service/diagnostics.sh ] || sh /tmp/dextend-service/diagnostics.sh stream native <"$work/probe.events" || true
+        exit "$rc"
+    fi
+fi
+note pausing_factory
+action pause-factory
+note factory_receivers_paused
+i=0
+while [ "$i" -lt 5 ] && [ "$(action listeners)" != 0 ]; do
+    action sleep 1
+    i=$((i + 1))
+done
+note waiting_for_socket
+listeners=$(action listeners)
+diag socket_listeners "count=$listeners"
+[ "$listeners" = 0 ]
+if [ -e "$root/var/run/adb-driver" ]; then
+    [ -S "$root/var/run/adb-driver" ] && [ ! -L "$root/var/run/adb-driver" ]
+    mv "$root/var/run/adb-driver" "$work/oem.socket"
+    socket_saved=1
+fi
+unset LD_PRELOAD
+export YAMAHA_AOA_DRIVER=independent YAMAHA_CARPLAY_SOCKET=/var/run/adb-driver
+export YAMAHA_CCU_DEVICE=/dev/yamaha_aoa YAMAHA_CCU_STATE=/sys/class/misc/yamaha_aoa/state
+export YAMAHA_CCU_MODULE=/tmp/yamaha-sdl/yamaha_aoa.ko YAMAHA_CCU_PREPARE=./prepare-aoa-independent.sh YAMAHA_INIT_DELAY=2
+note starting_receiver
+child=$(action start)
+note receiver_started "pid=$child"
+case "$child" in '' | *[!0-9]* | 0 | 1) exit 1 ;; esac
+i=0
+while [ "$i" -lt 20 ]; do
+    if action health "$child"; then
+        note healthy
+        trap - EXIT HUP INT TERM
+        exit 0
+    else
+        health_rc=$?
+        if [ "$health_rc" != "${last_health_rc:-}" ]; then
+            diag health_failed "code=$health_rc"
+            last_health_rc=$health_rc
+        fi
+        # A dead receiver cannot become healthy by waiting for the timeout.
+        [ "$health_rc" != 10 ] || exit 1
+    fi
+    action sleep 1
+    i=$((i + 1))
+done
+exit 1

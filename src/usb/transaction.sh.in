@@ -1,0 +1,674 @@
+#!/bin/sh
+# Dextend | Developed by Overev
+# Copyright (c) 2026 Overev | https://overev.com/
+
+# Generated lab package: explicit profile, owned paths, no MTD writes.
+set -eu
+umask 077
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+unset DEXTEND_FIXTURE_ROOT DEXTEND_RELEASE_DIR LD_PRELOAD
+p=/tmp/update/tmp/dextend
+s=/etc/yamaha-sdl/usb-v1
+mode=@MODE@
+release=@RELEASE@
+version=@VERSION@
+sequence=@SEQUENCE@
+hook=/script/custom_init.sh
+transport=usb
+backup_root=/mnt/UPAN
+report=$backup_root/DEXTEND-RESULT.txt
+if [ "${1:-}" = replace ] || [ "${1:-}" = replace-ota ]; then
+    [ "$mode" = restore-oem ] && [ "$#" = 2 ] || exit 2
+    case "$2" in /tmp/dextend-update-restore.*) ;; *) exit 2 ;; esac
+    [ -d "$2" ] && [ ! -L "$2" ] && [ -d /tmp/dextend-usb-lock ] || exit 2
+    transport=$1
+    [ "$transport" != replace-ota ] || backup_root=/tmp/dextend-updater
+    p=$2
+    report=$p/result
+elif [ "${1:-}" = ota ]; then
+    [ "$mode" = install ] || exit 2
+    transport=ota
+    p=/tmp/dextend-updater/extracted/tmp/dextend
+    backup_root=/tmp/dextend-updater
+    report=$backup_root/DEXTEND-RESULT.txt
+elif [ "${1:-}" = web ]; then
+    [ "$mode" = restore-oem ] || exit 2
+    transport=web
+    p=/tmp/boa/dextend-restore
+    backup_root=$p
+    report=$p/result
+fi
+locked=0
+report_owner=0
+last_report_error=
+report_stage=
+restore_work=
+write_started=0
+result=ERROR
+detail=UNEXPECTED_ERROR
+regular() { [ -f "$1" ] && [ ! -L "$1" ]; }
+exists() { [ -e "$1" ] || [ -L "$1" ]; }
+sha() { sha256sum "$1" | awk '{print $1}'; }
+matches() { regular "$1" && [ "$(sha "$1")" = "$2" ]; }
+id_ok() { [ "${#1}" = 64 ] && case "$1" in *[!0-9a-f]*) return 1 ;; *) return 0 ;; esac }
+report_failed() {
+    last_report_error=$1
+    [ -z "$report_stage" ] || rm -f "$report_stage"
+    report_stage=
+    return 1
+}
+write_report() {
+    [ "$report_owner" = 1 ] || return 1
+    [ -d "$backup_root" ] && [ ! -L "$backup_root" ] || {
+        report_failed directory
+        return 1
+    }
+    [ ! -L "$report" ] && { [ ! -e "$report" ] || regular "$report"; } || {
+        report_failed target
+        return 1
+    }
+    # Each writer owns its staging file; never share a fixed .new pathname.
+    report_stage=$(mktemp "$backup_root/.dextend-result.XXXXXX") || {
+        report_failed create
+        return 1
+    }
+    {
+        printf 'DEXTEND USB lab v1\noperation=%s\nversion=%s\nresult=%s\ndetail=%s\n' "$mode" "$version" "$result" "$detail" &&
+            printf 'settings_and_identity=preserved_except_radio_names\nhardware_validation=pending\n' &&
+            { [ -z "$last_report_error" ] || printf 'report_error=%s\n' "$last_report_error"; } &&
+            { [ ! -f /tmp/dextend-probe.txt ] || cat /tmp/dextend-probe.txt; }
+    } >"$report_stage" || {
+        report_failed write
+        return 1
+    }
+    sync || {
+        report_failed sync_before_rename
+        return 1
+    }
+    mv -f "$report_stage" "$report" || {
+        report_failed rename
+        return 1
+    }
+    report_stage=
+    sync || {
+        report_failed sync_after_rename
+        return 1
+    }
+}
+
+finish_exit() {
+    rc=$?
+    trap - EXIT HUP INT TERM
+    if [ "$rc" != 0 ] && [ "$result" = CHECKING ]; then
+        result=ERROR
+        detail=PREFLIGHT_FAILED_NO_FLASH_WRITES
+    fi
+    if [ "$transport" = web ] && [ "$write_started" = 0 ]; then result=REJECTED; fi
+    [ "$report_owner" = 0 ] || write_report || true
+    [ -z "$restore_work" ] || rm -rf "$restore_work"
+    [ "$locked" = 0 ] || rmdir /tmp/dextend-usb-lock 2>/dev/null || true
+    exit "$rc"
+}
+reject() {
+    result=REJECTED
+    [ "$write_started" = 0 ] || result=ERROR_AFTER_WRITE
+    detail=$1
+    printf 'DEXTEND: %s\n' "$detail" >&2
+    exit 1
+}
+radio_reject() {
+    code=$(cat /tmp/dextend-radio-error 2>/dev/null || true)
+    case "$code" in RADIO_*) case "$code" in *[!A-Z0-9_]*) code=$1 ;; esac ;; *) code=$1 ;; esac
+    [ "${#code}" -le 48 ] || code=$1
+    reject "$code"
+}
+put() {
+    [ ! -L "$s/$1" ] && [ ! -L "$s/$1.new" ] || reject STATE_SYMLINK
+    printf '%s\n' "$2" >"$s/$1.new"
+    sync
+    mv "$s/$1.new" "$s/$1"
+    sync
+}
+get() { regular "$s/$1" && cat "$s/$1"; }
+. "$p/profile.sh"
+if [ "${1:-}" = finish ]; then
+    report_owner=1
+    if [ "${2:-1}" = 0 ]; then
+        result=PREPARED_FOR_BOOT
+        [ "$mode" != restore-oem ] || result=OEM_RESTORED_RESTART_REQUIRED
+        detail=REMOVE_USB_AFTER_OEM_FINISH_THEN_POWER_CYCLE
+        [ "${3:-}" != preserve-metadata ] || detail=EXPECTED_OEM_ERROR_METADATA_PRESERVED_POWER_CYCLE
+    else
+        result=UPDATER_ERROR_AFTER_COMMIT
+        detail=DO_NOT_REINSTALL_BLINDLY_READ_STATE
+    fi
+    write_report
+    exit 0
+fi
+trap finish_exit EXIT
+trap 'detail=INTERRUPTED; exit 1' HUP INT TERM
+# Claim report ownership before any preflight error can invoke the exit trap.
+# A competing invocation must neither overwrite the owner's report nor unlock it.
+if [ "$transport" != replace ] && [ "$transport" != replace-ota ]; then
+    mkdir /tmp/dextend-usb-lock 2>/dev/null || reject ANOTHER_INSTALLER
+    locked=1
+fi
+report_owner=1
+for n in sha256sum awk cat cp mv rm mkdir rmdir sync tar df find grep sed wc uname mktemp chmod; do
+    command -v "$n" >/dev/null || reject MISSING_TOOL
+done
+[ -d /tmp ] && [ ! -L /tmp ] && [ -d /etc ] && [ ! -L /etc ] && [ -d /script ] && [ ! -L /script ] || reject BAD_ROOT
+if [ "$transport" = ota ] || [ "$transport" = replace-ota ]; then
+    [ -d "$backup_root" ] && [ ! -L "$backup_root" ] || reject BAD_OTA_PATH
+elif [ "$transport" != web ]; then
+    [ ! -L /mnt ] && [ -d /mnt/UPAN ] && [ ! -L /mnt/UPAN ] || reject BAD_USB_PATH
+    grep -q ' /mnt/UPAN vfat rw' /proc/mounts || reject USB_NOT_WRITABLE_VFAT
+else
+    [ -d "$p" ] && [ ! -L /tmp/boa ] && [ ! -L "$p" ] || reject BAD_WEB_PATH
+fi
+[ ! -L "$report" ] || reject REPORT_SYMLINK
+result=CHECKING
+detail=NO_FLASH_WRITES_YET
+write_report || reject USB_REPORT_FAILED
+profile_ok=1
+check_value() {
+    if ! regular "$1" || [ "$(cat "$1")" != "$2" ]; then
+        printf 'mismatch=%s\n' "$1" >>/tmp/dextend-probe.txt
+        profile_ok=0
+    fi
+}
+: >/tmp/dextend-probe.txt
+check_value /etc/box_product_type A15W
+# OEM stores box_version as a four-byte little-endian integer, not text.
+# Match bytes exactly: shell command substitution cannot preserve NUL bytes.
+if ! matches /etc/box_version 26b25d457597a7b0463f9620f666dd10aa2c4373a505967c7c8d70922a2d6ece; then
+    echo mismatch=/etc/box_version >>/tmp/dextend-probe.txt
+    profile_ok=0
+fi
+oem_checks=$p/OEM.sha256
+if regular /etc/software_version && [ "$(cat /etc/software_version)" != 2026.07.31.1733 ]; then
+    oem_checks=/tmp/dextend-selected-oem.sha256
+    printf '%s' "${additional_oem_profiles:-}" | awk -v version="$(cat /etc/software_version)" '
+      BEGIN {RS="|"; FS="@"} $1==version {gsub(/;/,"\n",$2); print $2}' >"$oem_checks"
+    if [ ! -s "$oem_checks" ]; then
+        echo mismatch=/etc/software_version >>/tmp/dextend-probe.txt
+        profile_ok=0
+        oem_checks=$p/OEM.sha256
+    fi
+else
+    check_value /etc/software_version 2026.07.31.1733
+fi
+if [ "$(uname -r)" != 3.14.52+g94d07bb ] || [ "$(uname -m)" != armv7l ]; then
+    echo mismatch=kernel_or_architecture >>/tmp/dextend-probe.txt
+    profile_ok=0
+fi
+while read -r expected path; do
+    if ! matches "/$path" "$expected"; then
+        printf 'mismatch=/%s\n' "$path" >>/tmp/dextend-probe.txt
+        profile_ok=0
+    fi
+done <"$oem_checks"
+rcs_state=unknown
+matches /etc/init.d/rcS "$stock_rcs" && rcs_state=stock || true
+matches /etc/init.d/rcS "$ssh_rcs" && rcs_state=repaired_with_ssh || true
+free_kib=$(df -Pk /etc | awk 'END {print $4}')
+mem_kib=$(awk '/^MemFree:|^Buffers:|^Cached:/{n+=$2} END{print n+0}' /proc/meminfo)
+printf 'profile_matches=%s\nrcs=%s\nflash_free_kib=%s\nram_reclaimable_estimate_kib=%s\n' "$profile_ok" "$rcs_state" "$free_kib" "$mem_kib" >>/tmp/dextend-probe.txt
+printf 'hardware_label=YMA0-WN16-0003 (manual qualification required)\n' >>/tmp/dextend-probe.txt
+if exists /etc/module_version; then echo module_version=present >>/tmp/dextend-probe.txt; else echo module_version=absent >>/tmp/dextend-probe.txt; fi
+if exists "$hook"; then
+    if regular "$hook"; then printf 'hook_sha256=%s\n' "$(sha "$hook")" >>/tmp/dextend-probe.txt; else echo hook=nonregular >>/tmp/dextend-probe.txt; fi
+else echo hook=absent >>/tmp/dextend-probe.txt; fi
+while read -r expected path; do
+    if exists "/$path"; then
+        if matches "/$path" "$expected"; then
+            state=known
+        elif regular "/$path"; then
+            state=$(sha "/$path")
+        else state=nonregular; fi
+        printf 'legacy_file=%s %s\n' "$path" "$state" >>/tmp/dextend-probe.txt
+    fi
+done <"$p/LEGACY.sha256"
+if [ "$mode" = probe ]; then
+    # Inventory only version metadata and code fingerprints, never device
+    # settings, pairing keys, radio addresses or credentials.
+    {
+        echo probe_revision=2
+        printf 'actual_software_version='
+        if regular /etc/software_version && [ "$(wc -c </etc/software_version)" -le 64 ]; then
+            awk 'NR==1 && /^[0-9][0-9.]*$/ {print; ok=1} END {if(!ok)print "unrecognized_format"}' /etc/software_version
+        else echo unavailable; fi
+        printf 'actual_kernel=%s\nactual_architecture=%s\n' "$(uname -r)" "$(uname -m)"
+        for path in etc/software_version etc/box_version etc/module_version; do
+            if regular "/$path"; then printf 'observed_sha256=/%s %s\n' "$path" "$(sha "/$path")"; fi
+        done
+        while read -r expected path; do
+            if regular "/$path"; then printf 'observed_sha256=/%s %s\n' "$path" "$(sha "/$path")"; fi
+        done <"$p/OEM.sha256"
+    } >>/tmp/dextend-probe.txt
+    result=PROBE_OK
+    detail=EXPECTED_OEM_ERROR_NO_FLASH_WRITES
+    # Deliberate abort: prevent OEM copying and deletion of module_version.
+    exit 1
+fi
+[ "$profile_ok" = 1 ] || reject UNSUPPORTED_OEM_PROFILE
+[ "$rcs_state" != unknown ] || reject UNKNOWN_RCS
+if exists /etc/module_version; then
+    [ ! -L /etc/module_version ] && { [ -f /etc/module_version ] || [ -d /etc/module_version ]; } || reject OEM_MODULE_METADATA_UNSAFE
+fi
+grep -q ' / jffs2 rw' /proc/mounts || reject ROOT_NOT_WRITABLE_JFFS2
+check_value /sys/class/mtd/mtd2/size 13107200
+check_value /sys/class/mtd/mtd2/erasesize 65536
+[ "$profile_ok" = 1 ] || reject UNEXPECTED_FLASH_LAYOUT
+for amount in "$free_kib" "$mem_kib"; do
+    case "$amount" in '' | *[!0-9]*) reject INVALID_MEMORY_REPORT ;; esac
+done
+[ "$mem_kib" -ge 16384 ] || reject INSUFFICIENT_RAM
+for n in /etc/yamaha-sdl /etc/wifi-usb /etc/init.d; do [ ! -L "$n" ] || reject PARENT_SYMLINK; done
+for n in /etc/yamaha-sdl /etc/wifi-usb; do
+    if exists "$n"; then [ -d "$n" ] || reject BAD_STATE_TYPE; fi
+done
+if exists /script/custom_init.sh.dextend-new; then
+    matches /script/custom_init.sh.dextend-new "$hook_sha" ||
+        matches /script/custom_init.sh.dextend-new "${v033_hook_sha:-}" ||
+        matches /script/custom_init.sh.dextend-new "${recent_hook_sha:-}" ||
+        matches /script/custom_init.sh.dextend-new "${previous_hook_sha:-}" ||
+        matches /script/custom_init.sh.dextend-new "${older_hook_sha:-}" || reject UNKNOWN_HOOK_STAGE
+fi
+if exists /etc/init.d/rcS.dextend-new; then
+    matches /etc/init.d/rcS.dextend-new "$stock_rcs" || reject UNKNOWN_RCS_STAGE
+fi
+if [ -d /etc/yamaha-sdl ]; then
+    [ -z "$(find /etc/yamaha-sdl ! -type f ! -type d)" ] || reject UNSAFE_STATE_OBJECT
+fi
+if [ -d /etc/wifi-usb ]; then
+    [ -z "$(find /etc/wifi-usb ! -type f ! -type d)" ] || reject UNSAFE_SERVICE_OBJECT
+fi
+managed=0
+if exists "$s"; then
+    [ -d "$s" ] || reject UNKNOWN_INSTALL_STATE
+    if ! matches "$s/format" "$format_sha"; then
+        # Interrupted creation or removal can leave only the empty scaffold.
+        ! exists "$hook" || reject UNKNOWN_INSTALL_STATE
+        for x in $(find "$s" -mindepth 1); do
+            [ "$x" = "$s/releases" ] && [ -d "$x" ] || reject UNKNOWN_INSTALL_STATE
+        done
+    fi
+    managed=1
+    # Whitelist directory and leaf names before backup/deletion. Do not execute state.
+    for x in $(find "$s"); do
+        rel=${x#"$s"}
+        case "$rel" in
+            '' | /releases | /radio | /radio.new) [ -d "$x" ] || reject BAD_STATE_TYPE ;;
+            /radio-output | /install-result | /install-result.new | /install-detail | /install-detail.new | /install-version | /install-version.new | /service-release | /service-release.new | /format | /boot.sh | /original-hook-absent | /active | /previous | /pending | /attempted | /confirmed | /status | /transaction | /active.new | /previous.new | /pending.new | /attempted.new | /confirmed.new | /status.new | /transaction.new)
+                regular "$x" || reject BAD_STATE_TYPE
+                ;;
+            /radio/* | /radio.new/*)
+                case "${rel##*/}" in riddle.conf | hostapd.conf | wifi_name | bluetooth_name | .custom_wifi_name | .custom_bluetooth_name | presence | SHA256SUMS)
+                    regular "$x" && [ "$(wc -c <"$x")" -le 65536 ] || reject BAD_RADIO_BASELINE
+                    ;;
+                *) reject UNKNOWN_RADIO_BASELINE ;;
+                esac
+                ;;
+            /releases/*)
+                part=${rel#/releases/}
+                ident=${part%%/*}
+                id_ok "$ident" || reject UNKNOWN_RELEASE_PATH
+                if [ "$part" = "$ident" ]; then
+                    [ -d "$x" ] || reject BAD_STATE_TYPE
+                else
+                    case "${part#*/}" in service-boot.sh | native-boot.sh | native-runtime.tar.lzma | service-runtime.tar.lzma | version.txt | SHA256SUMS) regular "$x" || reject BAD_STATE_TYPE ;; *) reject UNKNOWN_RELEASE_FILE ;; esac
+                fi
+                ;;
+            *) reject UNKNOWN_STATE_FILE ;;
+        esac
+    done
+    if ! matches "$s/original-hook-absent" "$empty_sha"; then
+        ! exists "$hook" || reject MISSING_OEM_BASELINE
+    fi
+fi
+restore_reserve_kib=64
+if exists "$s/radio"; then
+    radio_restore_kib=$(sh "$p/radio-names.sh" budget) || reject INVALID_RADIO_NAMES
+    restore_reserve_kib=$((restore_reserve_kib + radio_restore_kib))
+fi
+if [ "$mode" = install ] || exists "$s/radio"; then
+    sh "$p/radio-names.sh" preflight || reject INVALID_RADIO_NAMES
+fi
+# The service directory belongs to this installation only with its marker.
+service=/etc/yamaha-sdl/service
+if exists "$service"; then
+    [ "$managed" = 1 ] && [ -d "$service" ] && regular "$service/format" &&
+        [ "$(cat "$service/format")" = dextend-service-v1 ] || reject UNKNOWN_SERVICE_STATE
+    for x in "$service"/*; do
+        case "${x##*/}" in format | network.conf | network.conf.* | hostkey | hostkey.new | hostkey.new.pub | authorized_keys | authorized_keys.new | borrowed.before | borrowed.after | borrowed.kind | borrowed.key)
+            regular "$x" && [ "$(wc -c <"$x")" -le 65536 ] || reject UNKNOWN_SERVICE_FILE
+            ;;
+        *) reject UNKNOWN_SERVICE_FILE ;;
+        esac
+    done
+fi
+# Identify every removable legacy file by its exact known digest. Unknown files stop.
+: >/tmp/dextend-backup-list
+for directory in /etc/yamaha-sdl /etc/wifi-usb; do
+    [ ! -d "$directory" ] || for x in $(find "$directory" -type d); do
+        case "$x" in "$directory" | "$s" | "$s"/* | /etc/yamaha-sdl/service) ;; *) reject UNKNOWN_LEGACY_DIRECTORY ;; esac
+    done
+    [ ! -d "$directory" ] || for x in $(find "$directory" -type f); do
+        case "$x" in
+            "$s"/*) continue ;;
+            /etc/yamaha-sdl/service/*)
+                printf '%s\n' "${x#/}" >>/tmp/dextend-backup-list
+                continue
+                ;;
+            /etc/yamaha-sdl/phone-policy.json | /etc/yamaha-sdl/phone-policy.lock | /etc/yamaha-sdl/aa-video.conf | /etc/yamaha-sdl/aa-video.conf.??????)
+                [ "$managed" = 1 ] && regular "$x" && [ "$(wc -c <"$x")" -le 4096 ] || reject UNKNOWN_LEGACY_FILE
+                printf '%s\n' "${x#/}" >>/tmp/dextend-backup-list
+                continue
+                ;;
+        esac
+        expected=$(awk -v n="${x#/}" '$2==n {print $1}' "$p/LEGACY.sha256")
+        [ -n "$expected" ] && matches "$x" "$expected" || reject UNKNOWN_LEGACY_FILE
+        printf '%s\n' "${x#/}" >>/tmp/dextend-backup-list
+    done
+done
+hook_state=absent
+installed_boot_sha=$boot_sha
+if exists "$hook"; then
+    if matches "$hook" "$hook_sha"; then
+        hook_state=managed
+    elif matches "$hook" "${v033_hook_sha:-}"; then
+        hook_state=managed
+        installed_boot_sha=$v033_boot_sha
+    elif matches "$hook" "${recent_hook_sha:-}"; then
+        hook_state=managed
+        installed_boot_sha=$recent_boot_sha
+    elif matches "$hook" "${previous_hook_sha:-}"; then
+        hook_state=managed
+        installed_boot_sha=$previous_boot_sha
+    elif matches "$hook" "${older_hook_sha:-}"; then
+        hook_state=managed
+        installed_boot_sha=$older_boot_sha
+    elif matches "$hook" "$legacy_hook"; then
+        hook_state=legacy
+    else reject UNKNOWN_BOOT_HOOK; fi
+    echo script/custom_init.sh >>/tmp/dextend-backup-list
+fi
+[ "$managed" = 0 ] || echo etc/yamaha-sdl/usb-v1 >>/tmp/dextend-backup-list
+current=none
+replace_existing=0
+if [ "$mode" = install ]; then
+    [ "$hook_state" = absent ] && [ ! -d /etc/yamaha-sdl ] &&
+        [ ! -d /etc/wifi-usb ] && [ "$rcs_state" = stock ] &&
+        ! exists /script/custom_init.sh.dextend-new && ! exists /etc/init.d/rcS.dextend-new ||
+        replace_existing=1
+    [ "$hook_state" != managed ] || [ "$managed" = 1 ] || reject MISSING_MANAGED_STATE
+    if [ "$hook_state" = managed ]; then
+        matches "$s/boot.sh" "$installed_boot_sha" || reject UNKNOWN_BOOT_CONTROLLER
+        current=$(get active || true)
+        recovery=0
+        if [ "$current" = none ] && id_ok "$(get service-release || true)"; then
+            current=$(get service-release)
+            [ "$(get status || true)" = ROLLED_BACK_RESTART_REQUIRED ] || reject BAD_RECOVERY_STATE
+            recovery=1
+        fi
+        if [ "$current" = "$release" ]; then
+            matches "$s/releases/$release/SHA256SUMS" "$release" || reject DAMAGED_CURRENT_MANIFEST
+            (cd "$s/releases/$release" && sha256sum -c SHA256SUMS >/dev/null) || reject DAMAGED_CURRENT_RELEASE
+            result=ALREADY_INSTALLED
+            detail=NO_FLASH_WRITES
+            exit 1
+        fi
+        if [ "$current" != none ]; then
+            id_ok "$current" && matches "$s/releases/$current/SHA256SUMS" "$current" || reject BAD_CURRENT
+            { [ "$(get confirmed || true)" = "$current" ] || [ "$recovery" = 1 ]; } || reject CURRENT_NOT_BOOT_CONFIRMED
+            (cd "$s/releases/$current" && sha256sum -c SHA256SUMS >/dev/null) || reject DAMAGED_CURRENT_RELEASE
+            old_sequence=$(sed -n '2p' "$s/releases/$current/version.txt")
+            case "$old_sequence" in '' | *[!0-9]*) reject BAD_VERSION_SEQUENCE ;; esac
+            awk -v new="$sequence" -v old="$old_sequence" 'BEGIN{exit(new>old?0:1)}' || reject DOWNGRADE_OR_REUSED_VERSION
+        fi
+    fi
+    interrupted_id=$(get transaction || true)
+    if [ "$managed" = 1 ] && [ "$hook_state" = absent ] && id_ok "$interrupted_id" &&
+        exists "$s/releases/$interrupted_id/SHA256SUMS"; then
+        # A failed fresh install may have copied a complete release but not
+        # published active/hook yet. Verify it before allowing reclamation.
+        current=$interrupted_id
+        for marker in active pending confirmed; do ! exists "$s/$marker" || reject AMBIGUOUS_INTERRUPTED_INSTALL; done
+        matches "$s/releases/$current/SHA256SUMS" "$current" || reject DAMAGED_INTERRUPTED_MANIFEST
+        (cd "$s/releases/$current" && sha256sum -c SHA256SUMS >/dev/null) || reject DAMAGED_INTERRUPTED_RELEASE
+    fi
+    # Dextend capacity and integrity preflight. Finish it before removing the installed addon.
+    matches "$p/release/SHA256SUMS" "$release" || reject BAD_NEW_RELEASE_MANIFEST
+    (cd "$p/release" && sha256sum -c SHA256SUMS >/dev/null) || reject DAMAGED_NEW_RELEASE
+    bytes=$(wc -c <"$p/release/native-runtime.tar.lzma")
+    if regular "$p/release/service-runtime.tar.lzma"; then bytes=$((bytes + $(wc -c <"$p/release/service-runtime.tar.lzma"))); fi
+    radio_kib=$(sh "$p/radio-names.sh" budget) || reject INVALID_RADIO_NAMES
+    required_kib=$(((bytes + 1023) / 1024 + 320 + radio_kib))
+    if [ "$managed" = 1 ] && [ "$current" != none ]; then
+        # The installed archive is removed by its own checked restore worker.
+        # Stage in RAM, reserve space for removal, then measure again before install.
+        [ "$free_kib" -ge "$restore_reserve_kib" ] || reject INSUFFICIENT_FLASH_FOR_RESTORE
+    else
+        [ "$free_kib" -ge "$required_kib" ] || reject INSUFFICIENT_FLASH
+    fi
+else
+    [ "$free_kib" -ge "$restore_reserve_kib" ] || reject INSUFFICIENT_FLASH_FOR_RESTORE
+    if [ "$transport" != usb ]; then
+        [ "$managed" = 1 ] && [ "$hook_state" = managed ] || reject UNKNOWN_WEB_INSTALL
+        current=$(get active || true)
+        recovery=0
+        if [ "$current" = none ] && id_ok "$(get service-release || true)"; then
+            current=$(get service-release)
+            [ "$(get status || true)" = ROLLED_BACK_RESTART_REQUIRED ] || reject BAD_RECOVERY_STATE
+            recovery=1
+        fi
+        id_ok "$current" && { [ "$(get confirmed || true)" = "$current" ] || [ "$recovery" = 1 ]; } &&
+            [ ! -e "$s/pending" ] && [ ! -e "$s/transaction" ] || reject CURRENT_NOT_BOOT_CONFIRMED
+        matches "$s/releases/$current/SHA256SUMS" "$current" || reject DAMAGED_CURRENT_MANIFEST
+        (cd "$s/releases/$current" && sha256sum -c SHA256SUMS >/dev/null) || reject DAMAGED_CURRENT_RELEASE
+        matches "$s/boot.sh" "$installed_boot_sha" || reject UNKNOWN_BOOT_CONTROLLER
+    fi
+    [ "$hook_state" != managed ] || [ "$managed" = 1 ] || reject MISSING_MANAGED_STATE
+fi
+if [ "$rcs_state" = repaired_with_ssh ]; then
+    # Build from THIS unit's file, not a distributed OEM image.
+    awk '$0!="/usr/sbin/dropbear -B -p 22"' /etc/init.d/rcS >/tmp/dextend-restored-rcS
+    matches /tmp/dextend-restored-rcS "$stock_rcs" || reject RCS_RECONSTRUCTION_FAILED
+    echo etc/init.d/rcS >>/tmp/dextend-backup-list
+fi
+
+prepare_installed_restore() {
+    [ "$hook_state" = managed ] && id_ok "$current" || return 0
+    command -v lzma >/dev/null && command -v head >/dev/null || reject MISSING_TOOL
+    restore_work=$(mktemp -d /tmp/dextend-update-restore.XXXXXX) || reject RESTORE_STAGING_FAILED
+    runtime=$s/releases/$current/native-runtime.tar.lzma
+    # Cap staging size even if a checksum-valid file is not a valid runtime.
+    lzma -dc "$runtime" | head -c 1048577 >"$restore_work/runtime.tar"
+    [ "$(wc -c <"$restore_work/runtime.tar")" -le 1048576 ] || reject INSTALLED_RUNTIME_TOO_LARGE
+    tar -tf "$restore_work/runtime.tar" >"$restore_work/members" || reject BAD_INSTALLED_RUNTIME
+    # USB v1 releases before the marker use the compatible shared remover below.
+    grep -Fxq 'restore/update-protocol' "$restore_work/members" || return 0
+    for name in update-protocol transaction.sh profile.sh OEM.sha256 LEGACY.sha256 format; do
+        [ "$(grep -Fxc "restore/$name" "$restore_work/members")" = 1 ] || reject BAD_INSTALLED_RESTORE
+        tar -xOf "$restore_work/runtime.tar" "restore/$name" >"$restore_work/$name" || reject BAD_INSTALLED_RESTORE
+    done
+    { [ "$(cat "$restore_work/update-protocol")" = 1 ] || [ "$(cat "$restore_work/update-protocol")" = 2 ]; } &&
+        [ -s "$restore_work/transaction.sh" ] && matches "$restore_work/format" "$format_sha" ||
+        reject UNSUPPORTED_INSTALLED_RESTORE
+    if [ "$transport" = ota ] && [ "$(cat "$restore_work/update-protocol")" != 2 ]; then reject NETWORK_RESTORE_UNSUPPORTED; fi
+    if grep -Fxq 'restore/service-key-restore.sh' "$restore_work/members"; then
+        tar -xOf "$restore_work/runtime.tar" restore/service-key-restore.sh >"$restore_work/service-key-restore.sh" || reject BAD_INSTALLED_RESTORE
+    fi
+    # 0.22-alpha's signed restore worker omitted Dropbear's public sidecar.
+    # Correct only this exact archived worker, in RAM, after verifying its
+    # containing release. It still owns backup, removal and OEM verification.
+    if matches "$restore_work/transaction.sh" "${restore_0_22_sidecar_sha:-}"; then
+        sed 's/hostkey|hostkey.new|authorized_keys/hostkey|hostkey.new|hostkey.new.pub|authorized_keys/' \
+            "$restore_work/transaction.sh" >"$restore_work/transaction.fixed"
+        ! cmp -s "$restore_work/transaction.sh" "$restore_work/transaction.fixed" || reject RESTORE_COMPATIBILITY_FAILED
+        mv "$restore_work/transaction.fixed" "$restore_work/transaction.sh"
+    fi
+    for name in radio-names.sh radio-config.awk; do
+        if grep -Fxq "restore/$name" "$restore_work/members"; then
+            tar -xOf "$restore_work/runtime.tar" "restore/$name" >"$restore_work/$name" || reject BAD_INSTALLED_RESTORE
+        fi
+    done
+    rm "$restore_work/runtime.tar" "$restore_work/members"
+}
+use_installed_restore=0
+if [ "$replace_existing" = 1 ]; then
+    prepare_installed_restore
+    if [ -n "$restore_work" ] && [ -f "$restore_work/update-protocol" ]; then use_installed_restore=1; fi
+fi
+
+restore_oem() {
+    # Stop only the worker from the checked, running service payload.
+    if [ -d "$service" ] && regular /tmp/dextend-service/service.sh; then
+        sh /tmp/dextend-service/service.sh stop || reject SERVICE_STOP_FAILED
+    fi
+    if regular "$service/borrowed.before"; then
+        regular "$p/service-key-restore.sh" || reject MISSING_SERVICE_KEY_RESTORE
+        sh "$p/service-key-restore.sh" restore || reject SERVICE_KEY_CHANGED_PRESERVED
+    fi
+    if exists "$s/radio"; then
+        sh "$p/radio-names.sh" restore || radio_reject RADIO_RESTORE_FAILED
+    fi
+    # Make the next boot OEM before deleting the runtime. Running services end
+    # only at the deliberate power cycle, after the updater has finished.
+    if [ "$rcs_state" = repaired_with_ssh ]; then
+        cp /tmp/dextend-restored-rcS /etc/init.d/rcS.dextend-new
+        chmod 755 /etc/init.d/rcS.dextend-new
+        matches /etc/init.d/rcS.dextend-new "$stock_rcs" || reject RCS_WRITE_FAILED
+        sync
+        mv /etc/init.d/rcS.dextend-new /etc/init.d/rcS
+        sync
+    fi
+    [ "$hook_state" = absent ] || rm "$hook"
+    sync
+    # Remove side files before the ownership marker so retries still recognise them.
+    while read -r path; do
+        case "$path" in etc/yamaha-sdl/usb-v1 | etc/init.d/rcS | script/custom_init.sh) continue ;; esac
+        rm -f "/$path"
+    done </tmp/dextend-backup-list
+    [ ! -d "$service" ] || rmdir "$service" || reject NONEMPTY_SERVICE_DIRECTORY
+    if [ "$managed" = 1 ]; then
+        for x in "$s"/*; do
+            [ "${x##*/}" = format ] || ! exists "$x" || rm -r "$x"
+        done
+        [ ! -e "$s/format" ] || rm "$s/format"
+        rmdir "$s"
+    fi
+    for directory in /etc/yamaha-sdl /etc/wifi-usb; do
+        [ ! -d "$directory" ] || rmdir "$directory" || reject NONEMPTY_OWN_DIRECTORY
+    done
+    rm -f /script/custom_init.sh.dextend-new /etc/init.d/rcS.dextend-new
+    sync
+}
+verify_oem() {
+    ! exists "$hook" && ! exists /script/custom_init.sh.dextend-new &&
+        ! exists /etc/init.d/rcS.dextend-new && ! exists /etc/yamaha-sdl && ! exists /etc/wifi-usb &&
+        matches /etc/init.d/rcS "$stock_rcs" || reject RESTORE_READBACK_FAILED
+}
+install_fresh() {
+    mkdir -p "$s/releases"
+    cp "$p/format" "$s/format"
+    cp "$p/empty" "$s/original-hook-absent"
+    cp "$p/boot.sh" "$s/boot.sh"
+    chmod 700 "$s/boot.sh"
+    sync
+    put transaction "$release"
+    target=$s/releases/$release
+    mkdir "$target"
+    cp "$p/release/"* "$target/"
+    chmod 700 "$target/native-boot.sh"
+    matches "$target/SHA256SUMS" "$release" || reject RELEASE_MANIFEST_WRITE_FAILED
+    (cd "$target" && sha256sum -c SHA256SUMS >/dev/null) || reject RELEASE_WRITE_FAILED
+    sync
+    if regular "$target/service-runtime.tar.lzma"; then
+        mkdir "$service"
+        chmod 700 "$service"
+        printf 'dextend-service-v1\n' >"$service/format"
+        put service-release "$release"
+    fi
+    sh "$p/radio-names.sh" apply || radio_reject RADIO_NAMES_FAILED
+    put previous none
+    put pending "$release"
+    put active "$release"
+    cp "$p/empty" /etc/yamaha-sdl/enabled
+    cp "$p/hook.sh" /script/custom_init.sh.dextend-new
+    chmod 755 /script/custom_init.sh.dextend-new
+    matches /script/custom_init.sh.dextend-new "$hook_sha" || reject HOOK_WRITE_FAILED
+    put status PREPARED_FOR_BOOT
+    rm -f "$s/transaction"
+    sync
+    mv /script/custom_init.sh.dextend-new "$hook"
+    sync
+    matches "$hook" "$hook_sha" || reject HOOK_READBACK_FAILED
+}
+
+if [ "$use_installed_restore" = 0 ]; then
+    # No persistent changes precede this point. Verify the inverse copy first.
+    backup=$(mktemp -d "$backup_root/dextend-backup.XXXXXX") || reject BACKUP_FAILED
+    # OEM BusyBox rejects empty archives. Always include our non-private format
+    # marker, so first install (OEM hook absent) also produces a verifiable backup.
+    cp /tmp/dextend-backup-list /tmp/dextend-backup-full
+    for n in riddle.conf hostapd.conf wifi_name bluetooth_name .custom_wifi_name .custom_bluetooth_name; do
+        if regular "/etc/$n"; then printf 'etc/%s\n' "$n" >>/tmp/dextend-backup-full; fi
+    done
+    (cd / && tar -cf "$backup/before.tar" -T /tmp/dextend-backup-full "${p#/}/format") || reject BACKUP_FAILED
+    tar -tf "$backup/before.tar" >/dev/null || reject BACKUP_UNREADABLE
+    (cd "$backup" && sha256sum before.tar >SHA256SUMS && sync && sha256sum -c SHA256SUMS >/dev/null) || reject BACKUP_VERIFY_FAILED
+    cp /tmp/dextend-backup-full "$backup/paths.txt"
+    sync
+fi
+# Do this while Debug still runs and before the old remover changes flash.
+# Older releases did not stop the native receiver during removal.
+sh "$p/radio-names.sh" quiesce || reject RADIO_CONFIG_IN_USE
+write_started=1
+result=ERROR_AFTER_WRITE
+detail=WRITE_INTERRUPTED_CHECK_BACKUP_AND_STATE
+if [ "$transport" = web ]; then
+    result=WRITING
+    write_report || reject WEB_REPORT_FAILED
+    result=ERROR_AFTER_WRITE
+fi
+if [ "$mode" = restore-oem ]; then
+    restore_oem
+    verify_oem
+else
+    if [ "$replace_existing" = 1 ]; then
+        result=WRITING
+        detail=RESTORING_INSTALLED_VERSION
+        write_report || reject USB_REPORT_FAILED
+        result=ERROR_AFTER_WRITE
+        detail=RESTORE_INTERRUPTED_CHECK_BACKUP_AND_STATE
+        if [ "$use_installed_restore" = 1 ]; then
+            restore_transport=replace
+            [ "$transport" != ota ] || restore_transport=replace-ota
+            sh "$restore_work/transaction.sh" "$restore_transport" "$restore_work" || reject INSTALLED_RESTORE_FAILED
+            grep -Fxq result=FILES_COMMITTED "$restore_work/result" || reject INSTALLED_RESTORE_FAILED
+        else
+            restore_oem
+        fi
+    fi
+    verify_oem
+    result=WRITING
+    detail=INSTALLING_FRESH_FROM_OEM
+    write_report || reject USB_REPORT_FAILED
+    result=ERROR_AFTER_WRITE
+    detail=INSTALL_INTERRUPTED_RETRY_SAME_IMG
+    available_after_restore=$(df -Pk /etc | awk 'END {print $4}')
+    case "$available_after_restore" in '' | *[!0-9]*) reject INVALID_MEMORY_REPORT ;; esac
+    [ "$available_after_restore" -ge "$required_kib" ] || reject OEM_RESTORED_INSUFFICIENT_FLASH
+    install_fresh
+fi
+if [ "$transport" = web ]; then
+    result=OEM_RESTORED_RESTART_REQUIRED
+    detail=SAFE_TO_RESTART_FOR_OEM_SETTINGS_RESET
+else
+    result=FILES_COMMITTED
+    detail=WAIT_FOR_OEM_FINISH_DO_NOT_REMOVE_POWER
+fi
+exit 0

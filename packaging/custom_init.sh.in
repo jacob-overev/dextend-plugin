@@ -1,0 +1,50 @@
+#!/bin/sh
+# Dextend | Developed by Overev
+# Copyright (c) 2026 Overev | https://overev.com/
+
+# Owner-device current native only. Recovery archive is off-device.
+set -eu
+umask 077
+root=${DEXTEND_FIXTURE_ROOT:-}
+if [ -n "$root" ]; then
+    case "$root" in /*) ;; *) exit 2 ;; esac
+    [ "$root" != / ] && [ ! -L "$root" ] && [ -f "$root/.fixture" ] && [ ! -L "$root/.fixture" ] || exit 2
+    canonical=$(CDPATH= cd -- "$root" && pwd -P)
+    [ "$canonical" = "$root" ] && [ "$canonical" != / ] || exit 2
+    [ -f "$root/actions.sh" ] && [ ! -L "$root/actions.sh" ] || exit 2
+fi
+action() {
+    if [ -n "$root" ]; then
+        sh "$root/actions.sh" "$@"
+        return
+    fi
+    case "$1" in
+        alive) kill -0 "$2" 2>/dev/null ;;
+        *) return 2 ;;
+    esac
+}
+state=$root/etc/yamaha-sdl
+runtime=$root/tmp/yamaha-sdl
+note() { echo "NATIVE_ONESHOT $*"; }
+regular() { [ -f "$1" ] && [ ! -L "$1" ]; }
+matches() { regular "$1" && [ "$(sha256sum "$1" | awk '{print $1}')" = "$2" ]; }
+
+# Wi-Fi diagnostics starts before either application branch, once per hook call.
+if [ -f "$root/etc/wifi-usb/enabled" ]; then
+    mkdir -p "$root/tmp/wifi-usb"
+    chmod 700 "$root/tmp/wifi-usb"
+    sh "$root/etc/wifi-usb/boot.sh" >>"$root/tmp/wifi-usb/boot.log" 2>&1 </dev/null &
+fi
+[ -f "$state/enabled" ] || exit 0
+if regular "$runtime/boot.pid"; then
+    pid=$(cat "$runtime/boot.pid")
+    case "$pid" in '' | *[!0-9]*) ;; *) action alive "$pid" && exit 0 ;; esac
+fi
+[ ! -L "$runtime" ] || exit 2
+
+# Only the current native package is kept on this owner device.
+matches "$state/native-runtime.tar.lzma" @RUNTIME_SHA256@ || exit 1
+matches "$state/native-boot.sh" @BOOT_SHA256@ || exit 1
+mkdir "$root/tmp/dextend-native-started" 2>/dev/null || exit 0
+sh "$state/native-boot.sh" >/dev/null 2>&1 </dev/null &
+exit 0

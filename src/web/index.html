@@ -1,0 +1,431 @@
+<!doctype html>
+<!-- Dextend integration by Overev | https://overev.com/ -->
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Dextend / Console by Overev</title>
+    <link rel="stylesheet" href="console.css?v=build" />
+    <script defer src="i18n.js?v=build"></script>
+    <script defer src="console.js?v=build"></script>
+    <script defer src="aa-video.js?v=build"></script>
+    <script defer src="debug.js?v=build"></script>
+    <script defer src="phones.js?v=build"></script>
+    <script defer src="restore.js?v=build"></script>
+    <script defer src="diagnostics.js?v=build"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <a class="brand" href="#" aria-label="Dextend by Overev"
+          ><img src="assets/dextend-logo.svg" width="210" height="52" alt="Dextend" /><span
+            class="sub"
+            >BY OVEREV</span
+          ></a
+        >
+        <div class="header-controls">
+          <span class="badge">Dextend · Auto</span
+          ><select id="panel-language" aria-label="Język panelu" data-i18n-label>
+            <option value="pl" lang="pl">Polski</option>
+            <option value="en" lang="en">English</option>
+          </select>
+        </div>
+      </header>
+      <p class="plugin-version">
+        <span data-i18n>Wersja Dextend</span> <strong data-plugin-version>—</strong>
+      </p>
+      <main>
+        <div class="toolbar">
+          <div>
+            <span class="dot"></span
+            ><span id="change-state" aria-live="polite" data-i18n>Brak niezapisanych zmian</span>
+          </div>
+          <button id="export" type="button" data-i18n>↓ Eksport JSON</button>
+        </div>
+        <div
+          id="tabs"
+          class="tabs"
+          role="tablist"
+          aria-label="Kategorie konfiguracji"
+          data-i18n-label
+        ></div>
+        <form id="configuration" novalidate></form>
+        <div id="sections" class="sections"></div>
+        <form id="aa-video" hidden>
+          <div class="field">
+            <label for="aa-profile" data-i18n>Profil obrazu</label>
+            <select id="aa-profile" disabled>
+              <option value="yamaha">Yamaha LYWW20</option>
+              <option value="center" data-i18n>Centralny 640 × 360</option>
+              <option value="custom" data-i18n>Własny</option>
+            </select>
+          </div>
+          <p class="muted" data-i18n>
+            Rozdzielczość określa obszar rysowany przez telefon. Marginesy wycinają krawędzie klatki
+            800 × 480 px.
+          </p>
+          <div class="fields" id="aa-values"></div>
+          <p id="aa-size" class="muted"></p>
+          <div
+            class="actions"
+            id="aa-move"
+            role="group"
+            aria-label="Przesuń obraz o 2 px"
+            data-i18n-label
+          >
+            <button type="button" data-i18n disabled>← W lewo</button>
+            <button type="button" data-i18n disabled>W prawo →</button>
+            <button type="button" data-i18n disabled>↑ W górę</button>
+            <button type="button" data-i18n disabled>↓ W dół</button>
+          </div>
+          <p class="muted" data-i18n>
+            Każdy ruch przesuwa obraz o 2 px. Zapis ponownie uruchomi aktywne połączenie Android
+            Auto.
+          </p>
+          <div class="actions">
+            <button id="aa-save" type="submit" class="primary" disabled data-i18n>
+              Zapisz i zastosuj
+            </button>
+            <button id="aa-reload" type="button" data-i18n>Wczytaj z dongla</button>
+          </div>
+          <p id="aa-status" role="status" aria-live="polite"></p>
+        </form>
+        <section class="panel maintenance">
+          <div class="section-heading">
+            <span class="section-number">07</span>
+            <div>
+              <h2 data-i18n>Urządzenie i utrzymanie</h2>
+              <p data-i18n>Informacje, urządzenia sparowane i operacje serwisowe.</p>
+            </div>
+          </div>
+          <div class="service-grid">
+            <div>
+              <h3 data-i18n>Informacje o donglu</h3>
+              <dl>
+                <dt>Model</dt>
+                <dd>CPC200-CCPA</dd>
+                <dt data-i18n>Wersja dodatku</dt>
+                <dd><span data-plugin-version>—</span></dd>
+                <dt data-i18n>Numer seryjny</dt>
+                <dd>—</dd>
+                <dt data-i18n>Adres IP / czas pracy</dt>
+                <dd>—</dd>
+              </dl>
+            </div>
+            <div>
+              <h3 data-i18n>Sparowane telefony</h3>
+              <p class="muted" data-i18n>
+                CarPlay i Android Auto: wybierz preferowaną platformę i kolejność łączenia
+                telefonów.
+              </p>
+              <p class="help" data-i18n>Lista i priorytety są dostępne w zakładce Parowanie.</p>
+            </div>
+            <div>
+              <h3 data-i18n>Firmware i diagnostyka</h3>
+              <div class="actions">
+                <button disabled data-i18n>Sprawdź aktualizację</button
+                ><button disabled data-i18n>Wgraj firmware</button
+                ><button disabled data-i18n>Przywróć poprzednią wersję</button
+                ><button disabled data-i18n>Pobierz logi</button
+                ><button disabled data-i18n>Zgłoś problem / załącz plik</button
+                ><button disabled data-i18n>Restart dongla</button
+                ><button disabled data-i18n>Reset ustawień aplikacji</button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="phone-panel" class="panel phone-panel" hidden>
+          <div class="section-heading">
+            <span class="section-number">BT</span>
+            <div>
+              <h2 data-i18n>Sparowane telefony i priorytety</h2>
+              <p data-i18n>Automatyczne połączenie z CarPlay i Android Auto.</p>
+            </div>
+          </div>
+          <form id="phone-settings" aria-busy="true">
+            <div class="debug-grid">
+              <div>
+                <h3 data-i18n>Priorytet połączenia</h3>
+                <div class="field">
+                  <div>
+                    <label for="phone-preferred" data-i18n>Preferowana platforma</label
+                    ><small class="help" id="phone-preference-help" data-i18n
+                      >Najpierw telefony wybranej platformy, następnie pozostałe.</small
+                    >
+                  </div>
+                  <div class="control">
+                    <select id="phone-preferred" aria-describedby="phone-preference-help" disabled>
+                      <option value="none" data-i18n>Według listy</option>
+                      <option value="carplay">CarPlay</option>
+                      <option value="android-auto">Android Auto</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="muted" data-i18n>
+                  W obrębie platformy decyduje kolejność na liście. Jeśli telefon jest niedostępny,
+                  dongiel próbuje połączyć kolejny.
+                </p>
+                <p class="help" data-i18n>
+                  Zmiana nie przerywa działającego połączenia. Obowiązuje przy następnym łączeniu i
+                  pozostaje zapisana po restarcie dongla.
+                </p>
+              </div>
+              <div>
+                <div class="debug-title">
+                  <h3 data-i18n>Sparowane telefony</h3>
+                  <button id="phone-refresh" type="button" data-i18n>Odśwież listę</button>
+                </div>
+                <ol
+                  id="phone-devices"
+                  class="network-list phone-list"
+                  aria-label="Kolejność łączenia telefonów"
+                  data-i18n-label
+                >
+                  <li class="muted" data-i18n>Pobieranie telefonów…</li>
+                </ol>
+                <p class="help" data-i18n>
+                  Pierwszy na liście ma najwyższy priorytet. Nowy telefon sparuj przez Bluetooth z
+                  donglem, a następnie odśwież listę.
+                </p>
+              </div>
+            </div>
+            <p id="phone-status" role="status" aria-live="polite" data-i18n>Łączenie z donglem…</p>
+            <div class="actions">
+              <button id="phone-save" class="primary" type="submit" disabled data-i18n>
+                Zapisz na donglu
+              </button>
+            </div>
+          </form>
+        </section>
+        <section id="debug-panel" class="panel debug-panel" hidden>
+          <div class="section-heading">
+            <span class="section-number">USB</span>
+            <div>
+              <h2 data-i18n>Debug / Wi-Fi USB</h2>
+              <p data-i18n>
+                Oddzielna sieć serwisowa. Wbudowane Wi-Fi CarPlay pracuje niezależnie.
+              </p>
+            </div>
+            <span class="badge">AR9271 · wlan1</span>
+          </div>
+          <div class="debug-overview">
+            <div>
+              <span class="eyebrow" data-i18n>POŁĄCZENIE</span>
+              <h3 id="debug-state" data-i18n>Oczekiwanie na kartę</h3>
+              <p id="debug-details" class="muted">—</p>
+            </div>
+            <p class="muted" data-i18n>
+              Dongiel automatycznie szuka dowolnej zapamiętanej sieci i ponawia połączenie po
+              utracie zasięgu. Obsługa działa wyłącznie z podłączoną kartą USB.
+            </p>
+          </div>
+          <div class="card">
+            <label for="service-ssh"><input id="service-ssh" type="checkbox" disabled />
+              <span data-i18n>Dostęp serwisowy SSH</span></label>
+            <p class="muted" data-i18n>Włączenie pozwala właścicielowi wybranego klucza zalogować się jako root. Dostęp wygasa po restarcie adaptera.</p>
+            <label for="service-key" data-i18n>Klucz publiczny Ed25519 (domyślnie klucz autora)</label>
+            <input id="service-key" type="text" autocomplete="off" spellcheck="false" disabled />
+          </div>
+          <p id="debug-storage-mode" class="muted"></p>
+          <p id="debug-message" role="status" aria-live="polite"></p>
+          <div class="debug-grid">
+            <div>
+              <div class="debug-title">
+                <h3 data-i18n>Dostępne sieci</h3>
+                <button id="debug-scan" type="button" data-i18n>Skanuj ponownie</button>
+              </div>
+              <div id="debug-networks" class="network-list">
+                <p class="muted" data-i18n>Brak wyników skanowania.</p>
+              </div>
+              <form id="debug-network-form">
+                <h3 data-i18n>Dodaj sieć WPA2 Personal</h3>
+                <label for="debug-ssid">SSID</label
+                ><input
+                  id="debug-ssid"
+                  name="ssid"
+                  required
+                  maxlength="32"
+                  autocomplete="off"
+                  placeholder="Wybierz sieć lub wpisz nazwę"
+                  data-i18n-placeholder
+                /><label for="debug-password" data-i18n>Hasło</label
+                ><input
+                  id="debug-password"
+                  name="password"
+                  type="password"
+                  required
+                  minlength="8"
+                  maxlength="63"
+                  autocomplete="new-password"
+                />
+                <p class="help" data-i18n>
+                  Hasło trafia wyłącznie do dongla. Nie jest częścią eksportu ani zapisu
+                  przeglądarki.
+                </p>
+                <button type="submit" class="primary" data-i18n>Zapamiętaj i połącz</button>
+              </form>
+            </div>
+            <div>
+              <div class="debug-title">
+                <h3 data-i18n>Zapamiętane sieci</h3>
+                <button id="debug-reconnect" type="button" data-i18n>Ponów połączenie</button>
+              </div>
+              <div id="debug-saved" class="network-list"></div>
+              <h3 data-i18n>Zdarzenia połączenia</h3>
+              <p class="help" data-i18n>Zmiany stanu obserwowane od otwarcia panelu.</p>
+              <ol id="debug-events" class="debug-events" aria-live="polite"></ol>
+            </div>
+          </div>
+        </section>
+        <section id="diagnostics-panel" class="panel diagnostics-panel" hidden>
+          <div class="section-heading">
+            <span class="section-number">LOG</span>
+            <div>
+              <h2 data-i18n>Diagnostyka</h2>
+              <p data-i18n>Skopiuj raport po wystąpieniu problemu i dołącz go do zgłoszenia.</p>
+            </div>
+          </div>
+          <p class="muted" data-i18n>
+            Raport obejmuje bieżący stan instalacji, start dodatku oraz połączenie serwisowe. Logi
+            są przechowywane wyłącznie w ograniczonym buforze RAM i znikają po restarcie. Hasła i
+            klucze nie są zbierane.
+          </p>
+          <div class="actions">
+            <button id="diagnostics-refresh" type="button" data-i18n>Odśwież raport</button
+            ><button id="diagnostics-copy" class="primary copy-all" type="button" disabled>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <rect x="8" y="8" width="12" height="13" rx="2" />
+                <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></svg
+              ><span data-i18n>Kopiuj wszystko</span></button
+            ><button id="diagnostics-download" type="button" disabled data-i18n>
+              Pobierz raport
+            </button>
+          </div>
+          <p id="diagnostics-status" role="status" aria-live="polite"></p>
+          <label for="diagnostics-output" data-i18n>Raport diagnostyczny</label
+          ><textarea id="diagnostics-output" readonly spellcheck="false" dir="ltr"></textarea>
+        </section>
+        <section id="update-panel" class="panel update-panel" hidden>
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n>Aktualizacja Dextend</h2>
+              <p data-i18n>Sprawdź najnowszą wersję i zainstaluj ją przez Wi-Fi.</p>
+            </div>
+          </div>
+          <p class="muted" data-i18n>
+            Pozostań w sieci Wi-Fi adaptera. Telefon potrzebuje też dostępu do Internetu, aby pobrać
+            wydanie.
+          </p>
+          <p class="notice" data-i18n>
+            Na stronie aktualizacji wybierzesz wersję i potwierdzisz instalację. Podczas
+            aktualizacji pozostaw adapter podłączony do zasilania.
+          </p>
+          <div class="actions">
+            <a id="open-updater" class="button-link primary" href="/dextend/update/" data-i18n
+              >Otwórz updater</a
+            >
+          </div>
+        </section>
+        <section id="restore-panel" class="panel restore-panel" hidden>
+          <div class="section-heading">
+            <div>
+              <h2 data-i18n>Przywracanie ustawień fabrycznych</h2>
+              <p data-i18n>
+                Usuń Dextend, a po ponownym uruchomieniu zresetuj ustawienia i parowania w panelu
+                producenta.
+              </p>
+            </div>
+          </div>
+          <p class="notice" data-i18n>
+            Zostaw adapter podłączony do zasilania podczas każdej operacji. W trakcie resetu
+            połączenie Wi-Fi może się rozłączyć.
+          </p>
+          <p id="restore-status" role="status" tabindex="-1"></p>
+          <div class="actions">
+            <button id="restore-open" class="danger" type="button" data-i18n>
+              Rozpocznij przywracanie
+            </button>
+            <a id="restore-oem" href="/" target="_blank" rel="noopener" hidden data-i18n
+              >Otwórz panel producenta</a
+            >
+          </div>
+        </section>
+        <dialog
+          id="phone-forget-dialog"
+          class="panel restore-dialog"
+          aria-labelledby="phone-forget-title"
+          aria-describedby="phone-forget-description"
+        >
+          <h2 id="phone-forget-title" data-i18n>Usuń sparowanie</h2>
+          <p id="phone-forget-description"></p>
+          <div class="actions">
+            <button id="phone-forget-cancel" type="button" data-i18n>Anuluj</button>
+            <button id="phone-forget-confirm" type="button" class="primary" data-i18n>
+              Usuń sparowanie
+            </button>
+          </div>
+        </dialog>
+        <dialog
+          id="restore-dialog"
+          class="panel restore-dialog"
+          aria-labelledby="restore-title"
+          aria-describedby="restore-description"
+        >
+          <form id="restore-confirm">
+            <h2 id="restore-title" data-i18n>Potwierdź przywracanie</h2>
+            <p id="restore-description" data-i18n>
+              Usunięcie Dextend przygotuje adapter do resetu fabrycznego. Zostaw go podłączony do
+              zasilania, aż panel pozwoli uruchomić go ponownie.
+            </p>
+            <label for="restore-phrase" data-i18n>Wpisz PRZYWRÓĆ, aby kontynuować.</label>
+            <input
+              id="restore-phrase"
+              type="text"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              maxlength="16"
+              required
+              autofocus
+            />
+            <div class="actions">
+              <button id="restore-cancel" type="button" data-i18n>Anuluj</button>
+              <button id="restore-submit" type="submit" class="primary" disabled data-i18n>
+                Usuń Dextend
+              </button>
+            </div>
+          </form>
+        </dialog>
+        <footer>
+          <span class="muted" data-i18n>Dextend · Auto · zmodyfikowany dongiel CPC200-CCPA</span
+          ><span id="debug-availability" class="muted" data-i18n>sprawdzanie Wi-Fi USB…</span>
+        </footer>
+      </main>
+    </div>
+    <div class="savebar">
+      <div>
+        <strong id="save-label" data-i18n>Konfiguracja lokalna</strong
+        ><span data-i18n>Zapis nie zmienia ustawień dongla.</span>
+      </div>
+      <div class="save-actions">
+        <button id="discard" type="button" disabled data-i18n>Cofnij zmiany</button
+        ><button class="primary" type="submit" form="configuration" id="save" disabled>
+          <span class="save-text" data-i18n>Zapisz lokalnie</span> <span aria-hidden="true">↗</span>
+        </button>
+      </div>
+    </div>
+    <div id="toast" role="status"></div>
+  </body>
+</html>

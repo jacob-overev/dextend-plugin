@@ -1,0 +1,6 @@
+# Dextend | Developed by Overev | https://overev.com/
+# Preserve upstream license/header bytes, including original whitespace.
+licenses/GCC-copyright.txt -whitespace
+licenses/Lato-OFL-1.1.txt -whitespace
+src/native/third-party/jsmn/LICENSE -whitespace
+src/native/third-party/jsmn/jsmn.h -whitespace

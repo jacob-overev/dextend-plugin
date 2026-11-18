@@ -1,0 +1,213 @@
+{
+  "author": "Overev | https://overev.com/",
+  "schema": 1,
+  "baseline": "2026-10-30-native-clean-rc2",
+  "hardware_validation_inherited": false,
+  "aoa_source": "src/aoa/",
+  "files": [
+    {
+      "path": "src/native/probe.c",
+      "origin": "dongle-sdl/probe.c",
+      "import_sha256": "891714b02cacc3d6c2e6188990e5f9b86eb799392c742f2c0a275b6ee1a4218e",
+      "current_sha256": "57216b7cb6b7da23a1dacb47174fb36b8d5c3c8de69449fe9b48910bdd919e36"
+    },
+    {
+      "path": "src/native/iphone-usb-role.c",
+      "origin": "dongle-sdl/iphone-usb-role.c",
+      "import_sha256": "fbe7ae9a608a67be006226932c787d4d5dd91573cb1c012977df57da55e9f9fa",
+      "current_sha256": "5992e3af56a40a33b42c8879d1d52a589d547fef1c1863b58a89937cdf6de672"
+    },
+    {
+      "path": "src/native/bluetooth-autoconnect.c",
+      "origin": "dongle-sdl/bluetooth-autoconnect.c",
+      "import_sha256": "2274b0d882f83c6a7b68b640e0e71581abae25dc0e40e26542a771eccbd44958",
+      "current_sha256": "90b927b17b24c22313b85f7204569ef67c1d5c702b4cb09a304d035fe26273dc"
+    },
+    {
+      "path": "src/native/receiver-native.c",
+      "origin": "dongle-sdl/commercial/receiver-native.c",
+      "import_sha256": "e7d39ec2a7ac9fa802973a67f5c532c9a3b6bac41d6e4c204d8542dfc4509a09",
+      "current_sha256": "d84424708e888961673b564e13145f3760bf99fed69888773bbe311983134e84"
+    },
+    {
+      "path": "src/native/third-party/jsmn/jsmn.h",
+      "origin": "dongle-sdl/commercial/third-party/jsmn/jsmn.h",
+      "import_sha256": "c04533e9181e1e33baceb0f55ac449b05145bb936e8c68cc77dfe0d8277514fb",
+      "current_sha256": "c04533e9181e1e33baceb0f55ac449b05145bb936e8c68cc77dfe0d8277514fb"
+    },
+    {
+      "path": "src/native/third-party/jsmn/LICENSE",
+      "origin": "dongle-sdl/commercial/third-party/jsmn/LICENSE",
+      "import_sha256": "4675b94a50d2afe811c52785463c854f1156056632cce17cc7133939eac8ed55",
+      "current_sha256": "4675b94a50d2afe811c52785463c854f1156056632cce17cc7133939eac8ed55"
+    },
+    {
+      "path": "src/native/third-party/jsmn/PROVENANCE.json",
+      "origin": "dongle-sdl/commercial/third-party/jsmn/PROVENANCE.json",
+      "import_sha256": "56eb533992e988e46a655314366669940ff95da93249361d8042f4b17e04953e",
+      "current_sha256": "56eb533992e988e46a655314366669940ff95da93249361d8042f4b17e04953e"
+    },
+    {
+      "path": "tests/test_live.py",
+      "origin": "dongle-sdl/test_live.py",
+      "import_sha256": "885a162c8272bed8f0e19cf0fe03b819db7deee482acb961243735a82f6b4ffa",
+      "current_sha256": "9e0823f0c59d578edf7382b3a5d7ab14c184a41019fbe40a85737e0881d6481f"
+    },
+    {
+      "path": "tests/test_probe.py",
+      "origin": "dongle-sdl/test_probe.py",
+      "import_sha256": "faa8ae2f14ff7a80a24cfc376b97c869db27362749b8c59847dc4c7df514c60f",
+      "current_sha256": "07a652a801d49f79366d7d5df9eff636a6986403185f31d874509809364d18bc"
+    },
+    {
+      "path": "tests/test_recovery.py",
+      "origin": "dongle-sdl/test_recovery.py",
+      "import_sha256": "c9b49797027724643e30989a4f68d33a87c9ad12652595da9568255589c218fd",
+      "current_sha256": "94b4a8789a50f31f488eed1a9bb692c2c1b224a83c895054db3c05c33588b70e",
+      "merged_sources": [
+        {
+          "path": "tests/test_video_ack_guard.py",
+          "origin": "dongle-sdl/test_video_ack_guard.py",
+          "import_sha256": "086551637581aebcaf25cbec5e00fe6d3eb40a1ba9bbec16b81f2ecdb5895797"
+        },
+        {
+          "path": "tests/test_ipc_recovery.py",
+          "origin": "dongle-sdl/test_ipc_recovery.py",
+          "import_sha256": "20a68697570e14b9e5099037bfbc928b79e07cdcce20c4ee32d0f90bccea1228"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_bluetooth_autoconnect.py",
+      "origin": "dongle-sdl/test_bluetooth_autoconnect.py",
+      "import_sha256": "93d04ab5e8c02e20f12e7e282ea5c51b136df7ffd3a95eda0495946c6b00f7ce",
+      "current_sha256": "e5dab3360b99fb3461dbf07e5e3ea96e3b766ffb116d177ecac765a9ddbedbf3"
+    },
+    {
+      "path": "tests/test_receiver_native.py",
+      "origin": "dongle-sdl/commercial/test_receiver_native.py",
+      "import_sha256": "9d904feaf0872930caa64f7af6de3833cb46832630aad26f95f8fcb8bda44a01",
+      "current_sha256": "c417c7770fb63f0cf5bae0cdc342b410bbf9f262efbc8ce2534a9a0a7cb7b9b4"
+    },
+    {
+      "path": "tools/build-musl.sh",
+      "origin": "dongle-sdl/build-musl.sh",
+      "import_sha256": "1946d313b78597d1f6410e27f9b2e40829f6d1b607ceaa1dc2e0796676b1a38c",
+      "current_sha256": "06c62ac6cc3307f90787c8fead2b2a45d40033cb8924c9cbca4d35d02d66d231"
+    },
+    {
+      "path": "src/assets/waiting.png",
+      "origin": "Approved layout based on dongle-sdl/assets/waiting-screen.jpg at 5cfcab1",
+      "import_sha256": "a5a318df90f02ed51f1841869dd840e723341322d8560dd88e74635cbc61f67d",
+      "current_sha256": "f832e1ae8666ab551279dd0f7139e31005b2fe4bcd4e42a9cd212bf7e29575e0"
+    },
+    {
+      "path": "tools/build-waiting.py",
+      "origin": "dongle-sdl/commercial/build-distribution-waiting.py",
+      "import_sha256": "16ddbe19f9418c5f8b6601fab4dca0fefd629ee9e20bf15a4ba0bcab433e5ef4",
+      "current_sha256": "8ac5c7dbe5f53eeda7aff9e3447489038ce566415061019f464df119d0bbf3f3"
+    },
+    {
+      "path": "licenses/Lato-OFL-1.1.txt",
+      "origin": "docs/utrzymanie-dongla/licencje/third-party/Lato-OFL-1.1.txt",
+      "import_sha256": "2db57024b3739d399d40cf2a946806bffc08a44186d43bc89db3434daaaca085",
+      "current_sha256": "2db57024b3739d399d40cf2a946806bffc08a44186d43bc89db3434daaaca085"
+    },
+    {
+      "path": "licenses/musl-ARM-memcpy-BSD-2-Clause.txt",
+      "origin": "docs/utrzymanie-dongla/licencje/third-party/musl-ARM-memcpy-BSD-2-Clause.txt",
+      "import_sha256": "43186818ccd82f33834b96c2ba5fc5a8eba1fe16f422e31db8c0779ec9fe5d90",
+      "current_sha256": "43186818ccd82f33834b96c2ba5fc5a8eba1fe16f422e31db8c0779ec9fe5d90"
+    },
+    {
+      "path": "src/runtime/boot-live.sh",
+      "origin": "verified-native-rc2-runtime:boot-live.sh",
+      "import_sha256": "34131e764fef0426dd14fdcdcc6e6a1fbf1017502a6ab969553e7db0c55f25c3",
+      "current_sha256": "c98d6a4de516e6832065b9713bcc8af1596ce555ec348587ff975607c2c9e4c5"
+    },
+    {
+      "path": "src/runtime/iap2-wifi-test-step.sh",
+      "origin": "verified-native-rc2-runtime:iap2-wifi-test-step.sh",
+      "import_sha256": "915c015b655bbc4a89352f88dba8615810c49872b0103ef52deb9fb204df562c",
+      "current_sha256": "455d9d5594edfd071d877496624a4293efd6986a22b1d1167c26844e236fd110"
+    },
+    {
+      "path": "src/runtime/prepare-aoa-independent.sh",
+      "origin": "verified-native-rc2-runtime:prepare-aoa-independent.sh",
+      "import_sha256": "de616d9d82a675d34aa8eea85874204ada0345f102316b1a260e08a26aab9de5",
+      "current_sha256": "f8a7c247d1671dbaa05fbfe75c0dc25a6d1976c00b573d810e13f9e279649164"
+    },
+    {
+      "path": "src/runtime/restart-live-carplay.sh",
+      "origin": "verified-native-rc2-runtime:restart-live-carplay.sh",
+      "import_sha256": "47a8aa7b55c82112dc198b910e70e5f54e2f11f7de2ca1d5c55ef4b15347a4dd",
+      "current_sha256": "9656e33bc8538099c439d64711850cdc21ccb93690bfb3d8ccdfbb153d7a12e5"
+    },
+    {
+      "path": "src/runtime/start-independent-candidate.sh",
+      "origin": "verified-native-rc2-runtime:start-independent-candidate.sh",
+      "import_sha256": "2cd84e0ff097997cc00dbb8e06e714b34e96cab3ccaa58c9e4a3de727acc0273",
+      "current_sha256": "40091443bada857dae6dbf79ac2aa7c7ac23d32eca6c94196ba6cad28514a086"
+    },
+    {
+      "path": "src/runtime/start-live-carplay.sh",
+      "origin": "verified-native-rc2-runtime:start-live-carplay.sh",
+      "import_sha256": "05445fe3b3773382060324e8094a39e4e6a1fed1774d6a9553353e5d6c4e35b8",
+      "current_sha256": "4480c4ee740a24d78455caa05d7dd5a6eefff1e80b26846ebc957d2d52c927db"
+    },
+    {
+      "path": "src/runtime/supervise-ccu.sh",
+      "origin": "verified-native-rc2-runtime:supervise-ccu.sh",
+      "import_sha256": "968d39d1f1dd88c8e64c68cecd8f2a3244b5d58ae48a43b36b283ec9784eda3f",
+      "current_sha256": "d0a416c342f403136a924db43db47fa854af03f348e5d721b5e416edda14088e"
+    },
+    {
+      "path": "src/runtime/supervise-phone.sh",
+      "origin": "verified-native-rc2-runtime:supervise-phone.sh",
+      "import_sha256": "97ef9feaab0d95dd19c588e7df49e25561df06acfa4a121991dca35dbe3be3fc",
+      "current_sha256": "7ff559a85efdf6a5fd1357f5fe405d70bab1b7206a6cc8492982672d8c205546"
+    },
+    {
+      "path": "licenses/GCC-copyright.txt",
+      "origin": "verified-native-rc2-runtime:third-party/GCC-copyright.txt",
+      "import_sha256": "41a2d69df964174fb042b6513e99b72177318e94ca0c29a813e6f3155a9c5048",
+      "current_sha256": "41a2d69df964174fb042b6513e99b72177318e94ca0c29a813e6f3155a9c5048"
+    },
+    {
+      "path": "licenses/GPL-3.txt",
+      "origin": "verified-native-rc2-runtime:third-party/GPL-3.txt",
+      "import_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "current_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "path": "licenses/musl-COPYRIGHT.txt",
+      "origin": "verified-native-rc2-runtime:third-party/musl-COPYRIGHT.txt",
+      "import_sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
+      "current_sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+    },
+    {
+      "path": "src/runtime/usb-log-recorder.sh",
+      "origin": "verified-native-rc2-runtime:usb-log-recorder.sh",
+      "import_sha256": "89ec2e4a17d88a9ddd0f94d73a2dab6498590125ede01223f1c7b4c7e0650c88",
+      "current_sha256": "5ac0eef33e9dff16721ac577ab90336458bb87ec649154ca6c59a40fdd2afdf9"
+    },
+    {
+      "path": "src/runtime/wireless-step.sh",
+      "origin": "verified-native-rc2-runtime:wireless-step.sh",
+      "import_sha256": "40043291f56e6471f046576e0ae539c44efbdd01f8d8f3c7b01a29da7f7eadc3",
+      "current_sha256": "5889ce27e7dd730850378cdc1ce153dd4632d5fd6c5178612266b7e691ff637a"
+    },
+    {
+      "path": "packaging/native-boot.sh.in",
+      "origin": "native-clean-rc2 generated native-boot.sh (digest placeholders only)",
+      "import_sha256": "82c8306faec4f28bc4cb3707842b55899d3bba27aecb6180d594c205395ec749",
+      "current_sha256": "4c22ada82e654d4c0a57a794f09f637cd76651502ca94bbf8020378de1fef278"
+    },
+    {
+      "path": "packaging/custom_init.sh.in",
+      "origin": "native-clean-rc2 generated custom_init.sh (digest placeholders only)",
+      "import_sha256": "db90131b2ec8f155f842fed8fe1b67f029573477ec4de68c1a6616695d23672b",
+      "current_sha256": "2f1f8cd354a59aba1513f39980974d53fe03513521ff52d4e3e78087d9ac3a53"
+    }
+  ]
+}

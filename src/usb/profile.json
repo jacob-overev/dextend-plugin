@@ -1,0 +1,72 @@
+{
+  "author": "Overev | https://overev.com/",
+  "schema": 1,
+  "name": "a15w-2026.07.31.1733-iw416-lab",
+  "product": "A15W",
+  "custom_version": "2",
+  "software_version": "2026.07.31.1733",
+  "kernel": "3.14.52+g94d07bb",
+  "architecture": "armv7l",
+  "hardware_label": "YMA0-WN16-0003",
+  "hardware_label_automatically_verified": false,
+  "mtd2_size": 13107200,
+  "erase_size": 65536,
+  "reserve_eraseblocks": 4,
+  "minimum_mem_available_kib": 16384,
+  "oem_files": {
+    "script/update_box.sh": "b5367dde428ca995f2aabc8a18675b630bd6b92e32e2791da9345c3761e2641f",
+    "script/quickly_update.sh": "ba4516689cee2b9711c556f9af461fdb7222d025c2b9f61f6f3ce3240c0fb0fd",
+    "script/check_update.sh": "2329a735aeb0ad8764377b837226accc9d284da9928f46a403eaac2bc82beb00",
+    "script/smart_copy.sh": "5d3b4d6299f31317469482b4d244ae445c8f0135882f44fb85916882593cc693",
+    "script/start_main_service.sh": "8fa516e8160cba1b73d31e57d1934d1022a27f03a729bf57dd7980257fa4643e",
+    "etc/mdev/udisk_insert.sh": "be95793ccfe15506563bea6af5ab899e88451e51043a983a41f5ad076241c129",
+    "usr/sbin/ARMimg_maker": "36bff0dc9ad5c0c14db22093af6af69ce5e995258b2024fc8bb7a355206275c3",
+    "usr/sbin/AppleCarPlay": "bceab4a60f8679dfd48b1c75b0b0428f68ad97e8c18487a4217e8640e3a777aa",
+    "usr/sbin/ARMiPhoneIAP2": "fdd163f4d30be16724e52ac97f8bb699e81c04243d18e4975ac6fcd3eb3d2a2b",
+    "usr/sbin/riddleBoxCfg": "087f9a0bc4ebf4571ad18cfef008992ae4b8d75e6c9dce8cc8f0c370c7f4f9c0",
+    "lib/libc-2.20.so": "951c9ed15b53acd33ff5f97d75e3953214141a6387446daae78ae22c5b5d4bd0",
+    "lib/firmware/nxp/iw416_ko.tar.gz": "f2bfda52442d6445b7f59c5b9fbfdaff8ae6e06f3aeccfaacca5c5b98c14ca3a"
+  },
+  "stock_rcs_sha256": "0f93615bbb239415ada85ad388272cec5c3a0bad8c4cab35e51e008af785053b",
+  "repaired_ssh_rcs_sha256": "5061cc55074ff5ed462896510471fee75114b4f35123c3a3d8d434206fbd0ac3",
+  "previous_usb_v1_hook_sha256": "3529b0551d51aef06a4eda1b56e3c6fccaf7b545609e5027296854a93fe046e6",
+  "previous_usb_v1_boot_sha256": "1c56f050ab006b12f40e26c7c1bd6a1996008af8e1886c81ce10c53a0f6ac691",
+  "legacy_hook_sha256": "040566aa4637792cf288651533fd5d865bf6e3e5a39cab542cedae20ecb5fa41",
+  "legacy_files": {
+    "etc/yamaha-sdl/native-boot.sh": "a811733f1e2fe3b27a7d36048bd85f6eca61fb61a5a3703d7493d19392458616",
+    "etc/yamaha-sdl/native-runtime.tar.lzma": "61e4fbaef051cd7c8c1d32d20dbc5164fdf349b7d43011486c3cadf994477bca",
+    "etc/yamaha-sdl/enabled": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "etc/wifi-usb/tools.tar.lzma": "e4c09f854202f94a17a18cb4aaff84e08d3637705a65e40c8aeaec5f61b212cb",
+    "etc/wifi-usb/debug-addon.tar.gz": "8e8133e8661ec81e603824a9eba469b1b12ff9bab2449de0130981a40e4a0fb3",
+    "etc/wifi-usb/boot.sh": "3ceabc12119150000595d6e03c2dddd419badb0c1fb78015e5148239c9c5f455",
+    "etc/wifi-usb/enabled": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "restore_0_22_sidecar_sha256": "7b69c01bc98cf99ede91881102c2b1ad44b822cfaa904e00ab4d6e737ba8b251",
+  "older_usb_v1_hook_sha256": "147ca1cb6cce961b715e7f42a588ac3bc09a108c04e7cf8ee69b587502639717",
+  "older_usb_v1_boot_sha256": "4b3a1a233b96cdb8a7437ad5b10eb8fb3692cc79a0e1499588f5360498928353",
+  "recent_usb_v1_hook_sha256": "814bbfbc3b2219cd3b98dd09c1c660e0f37311d0b2dbf4d9cd3329a3165fb42e",
+  "recent_usb_v1_boot_sha256": "7148b1e8e5e66351c1c748dc1e16b0f7d0f32be5902ee5b6ec724a751f1eabc7",
+  "usb_v1_0_33_hook_sha256": "6d37fba1cfe942cad2da1ef08751727d71bfc10986bde1285aea8e0a4afa277f",
+  "usb_v1_0_33_boot_sha256": "7148b1e8e5e66351c1c748dc1e16b0f7d0f32be5902ee5b6ec724a751f1eabc7",
+  "additional_profiles": [
+    {
+      "name": "a15w-2025.10.15.1127-iw416-probe",
+      "software_version": "2025.10.15.1127",
+      "oem_files": {
+        "script/update_box.sh": "827a265f4c9bb5c88dc80d85bf34e3e7c7156f6aa53a24f87e5cf9f4294ce92e",
+        "script/quickly_update.sh": "ba4516689cee2b9711c556f9af461fdb7222d025c2b9f61f6f3ce3240c0fb0fd",
+        "script/check_update.sh": "2329a735aeb0ad8764377b837226accc9d284da9928f46a403eaac2bc82beb00",
+        "script/smart_copy.sh": "5d3b4d6299f31317469482b4d244ae445c8f0135882f44fb85916882593cc693",
+        "script/start_main_service.sh": "8fa516e8160cba1b73d31e57d1934d1022a27f03a729bf57dd7980257fa4643e",
+        "etc/mdev/udisk_insert.sh": "be95793ccfe15506563bea6af5ab899e88451e51043a983a41f5ad076241c129",
+        "usr/sbin/ARMimg_maker": "36bff0dc9ad5c0c14db22093af6af69ce5e995258b2024fc8bb7a355206275c3",
+        "usr/sbin/AppleCarPlay": "fda3556e5b60ed1d425cefa7c36ff3f0419d893024ea676f9338d1593069773a",
+        "usr/sbin/ARMiPhoneIAP2": "f717369247feae279a184e9dc93a3b3cebfcea966e2fed4e380c411ef30fdb4c",
+        "usr/sbin/riddleBoxCfg": "087f9a0bc4ebf4571ad18cfef008992ae4b8d75e6c9dce8cc8f0c370c7f4f9c0",
+        "lib/libc-2.20.so": "951c9ed15b53acd33ff5f97d75e3953214141a6387446daae78ae22c5b5d4bd0",
+        "lib/firmware/nxp/iw416_ko.tar.gz": "f2bfda52442d6445b7f59c5b9fbfdaff8ae6e06f3aeccfaacca5c5b98c14ca3a"
+      },
+      "evidence": "User probe r2; installation path checked against archived stock updater. CarPlay binaries differ from public stock; hardware validation pending."
+    }
+  ]
+}
