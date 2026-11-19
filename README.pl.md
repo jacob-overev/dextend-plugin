@@ -56,6 +56,7 @@ Pośrednik dla Twojego motocykla jest wskazany w tabeli zgodności, razem ze sta
 | --- | --- | --- | --- |
 | Carlinkit | <a id="posrednik-ccpa"></a>CPC200-CCPA / A15W | `YMA0-WN16-0003` | `2026.07.31.1733` |
 | Carlinkit | CPC200-CCPA / A15W | `YMA0-WN16-0003` | `2025.10.15.1127` |
+| Carlinkit | CPC200-CCPA / A15W | `YMA0-WN16-0003` | `2025.02.25.1521` (Instalacja USB potwierdzona z Dextend 1.2-beta) |
 
 CPC200-CCPA / A15W to oznaczenie rodziny urządzeń. Rewizję sprzętu sprawdzisz w polu **Hardware Version**, a firmware w polu **Version** na ekranie **Box Info** pośrednika. Tabela zawiera wersje firmware producenta, na których przetestowaliśmy Dextend.
 

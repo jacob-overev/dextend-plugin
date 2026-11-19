@@ -56,6 +56,7 @@ The compatibility table lists the adapter for your motorcycle and its support st
 | --- | --- | --- | --- |
 | Carlinkit | <a id="posrednik-ccpa"></a>CPC200-CCPA / A15W | `YMA0-WN16-0003` | `2026.07.31.1733` |
 | Carlinkit | CPC200-CCPA / A15W | `YMA0-WN16-0003` | `2025.10.15.1127` |
+| Carlinkit | CPC200-CCPA / A15W | `YMA0-WN16-0003` | `2025.02.25.1521` (USB installation verified with Dextend 1.2-beta) |
 
 CPC200-CCPA / A15W is the name of a device family. On the adapter’s **Box Info** screen, check **Hardware Version** for the hardware revision and **Version** for the firmware. The table lists the manufacturer’s firmware versions on which we tested Dextend.
 
