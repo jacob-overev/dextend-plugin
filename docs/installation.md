@@ -2,14 +2,14 @@
 
 ## Check your adapter
 
-Look up your motorcycle’s model and year in the compatibility table in the README. On the Carlinkit CPC200-CCPA / A15W, open **Box Info**. The tested hardware revision (**Hardware Version**) is `YMA0-WN16-0003`. The tested firmware versions (**Version**) are `2025.10.15.1127` and `2026.07.31.1733`. Both use the same installation image. If your details differ, check compatibility before installing.
+Look up your motorcycle’s model and year in the compatibility table in the README. On the Carlinkit CPC200-CCPA / A15W, open **Box Info**. The tested hardware revision (**Hardware Version**) is `YMA0-WN16-0003`. The tested firmware versions (**Version**) are `2025.10.15.1127` and `2026.07.31.1733`. Both use the same installation image. On A15W the installer records the firmware version in its report. Other firmware versions require verification after startup. Installation preserves the owner’s `/etc/init.d/rcS` script and SSH or Telnet settings.
 
 A power cut during installation can leave the adapter unusable. Keep a verified backup if you need to recover the original software. Recovery is not guaranteed.
 
 ## Prepare the drive
 
-1. Download the [A15W_Update.img installation image](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/A15W_Update.img) and its [SHA256SUMS checksum file](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/SHA256SUMS).
-2. In the download folder on Windows, run `Get-FileHash .\A15W_Update.img -Algorithm SHA256` in PowerShell. In the same folder on macOS, run `shasum -a 256 A15W_Update.img` or, on Linux, `sha256sum A15W_Update.img`. Compare the hash with the entry in `SHA256SUMS`. Stop if they differ.
+1. Download the [A15W_Update.img installation image](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/A15W_Update.img). For optional verification on your computer, download the [SHA256SUMS checksum file](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/SHA256SUMS).
+2. To verify the downloaded image yourself, use the following commands. In the download folder on Windows, run `Get-FileHash .\A15W_Update.img -Algorithm SHA256` in PowerShell. In the same folder on macOS, run `shasum -a 256 A15W_Update.img` or, on Linux, `sha256sum A15W_Update.img`. Compare the hash with the entry in `SHA256SUMS`. Stop if they differ.
 3. Back up the files on your USB drive before formatting it as FAT32. Copy just the image to the root of the drive, keep its filename and eject the drive from the computer.
 
 ## Install and check the result

@@ -135,7 +135,7 @@
       "path": "src/runtime/prepare-aoa-independent.sh",
       "origin": "verified-native-rc2-runtime:prepare-aoa-independent.sh",
       "import_sha256": "de616d9d82a675d34aa8eea85874204ada0345f102316b1a260e08a26aab9de5",
-      "current_sha256": "f8a7c247d1671dbaa05fbfe75c0dc25a6d1976c00b573d810e13f9e279649164"
+      "current_sha256": "8ee43b5bb4fedda60cf47e81e9d17e660667886fc3af57e3192c9d681dc87d25"
     },
     {
       "path": "src/runtime/restart-live-carplay.sh",
@@ -201,7 +201,7 @@
       "path": "packaging/native-boot.sh.in",
       "origin": "native-clean-rc2 generated native-boot.sh (digest placeholders only)",
       "import_sha256": "82c8306faec4f28bc4cb3707842b55899d3bba27aecb6180d594c205395ec749",
-      "current_sha256": "4c22ada82e654d4c0a57a794f09f637cd76651502ca94bbf8020378de1fef278"
+      "current_sha256": "bbc02c6a9cb18899dbeca201216dac0d32570302bdeb89fea9bbc140769cebe9"
     },
     {
       "path": "packaging/custom_init.sh.in",

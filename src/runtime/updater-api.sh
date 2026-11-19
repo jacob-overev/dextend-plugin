@@ -62,10 +62,7 @@ info() {
     install_detail=$(sed -n 's/^detail=//p' "$w/DEXTEND-RESULT.txt" 2>/dev/null || true)
     case "$install_detail" in *[!A-Z0-9_]*) install_detail=UNKNOWN ;; esac
     compatible=false
-    if [ "$(cat /etc/box_product_type 2>/dev/null)" = A15W ] &&
-        { [ "$(cat /etc/software_version 2>/dev/null)" = 2026.07.31.1733 ] ||
-            [ "$(cat /etc/software_version 2>/dev/null)" = 2025.10.15.1127 ]; } &&
-        [ "$(uname -r)" = 3.14.52+g94d07bb ]; then compatible=true; fi
+    if [ "$(cat /etc/box_product_type 2>/dev/null)" = A15W ]; then compatible=true; fi
     reply '200 OK' "{\"product\":\"Dextend\",\"protocol\":1,\"diagnostics\":1,\"stage\":\"$stage\",\"install_detail\":\"$install_detail\",\"version\":\"$version\",\"sequence\":\"$sequence\",\"confirmed\":$confirmed,\"compatible\":$compatible,\"boot\":\"$boot\",\"state\":\"$state\",\"detail\":\"$detail\",\"received\":$received,\"token\":\"$token\"}"
 }
 if [ "$REQUEST_METHOD" = GET ]; then

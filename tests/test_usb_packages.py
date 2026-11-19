@@ -51,7 +51,7 @@ class ReleaseSequenceTests(unittest.TestCase):
                 (hook, boot),
                 [
                     (constants[key + "_hook_sha"], constants[key + "_boot_sha"])
-                    for key in ("v033", "recent", "previous", "older")
+                    for key in ("beta1", "v033", "recent", "previous", "older")
                 ],
             )
 
@@ -429,7 +429,7 @@ class TransactionTests(unittest.TestCase):
                         "SEQUENCE": 0,
                     },
                 ).replace(
-                    b"write_started=1\n", b"write_started=1\n: > /tmp/installed-restore-ran\n", 1
+                    b"\nwrite_started=1\n", b"\nwrite_started=1\n: > /tmp/installed-restore-ran\n", 1
                 )
                 if hasattr(self, "restore_worker"):
                     files["transaction.sh"] = self.restore_worker
@@ -470,7 +470,7 @@ class TransactionTests(unittest.TestCase):
         self.write("tmp/update/tmp/dextend/BUNDLE.sha256", checks)
         from build_usb import installer_entry
 
-        self.write("tmp/update/tmp/once.sh", installer_entry(checks), 0o755)
+        self.write("tmp/update/tmp/once.sh", installer_entry(checks, mode, version), 0o755)
         self.write(
             "tmp/update/tmp/finish.sh",
             b'#!/bin/sh\nexec sh /tmp/update/tmp/dextend/transaction.sh finish "${1:-1}"\n',
@@ -875,19 +875,17 @@ exec /usr/bin/busybox {command} "$@"
         self.assertIn("profile_matches=1", self.result())
         self.assertNotIn("mismatch=/etc/box_version", self.result())
 
-    def test_invalid_variant_bytes_rejected_without_writes(self):
-        for value in (
-            b"2\n",
-            b"2",
-            b"",
-            b"\x02\x00\x00",
-            b"\x02\x00\x00\x00\n",
-            b"\x00\x00\x00\x02",
-            b"\x03\x00\x00\x00",
-        ):
-            with self.subTest(value=value):
-                self.write("etc/box_version", value)
-                self.assert_rejected_unchanged("UNSUPPORTED_OEM_PROFILE")
+    def test_install_on_custom_a15w(self):
+        self.write("etc/box_version", b"another variant")
+        self.write("etc/software_version", b"2024.01.01.1234")
+        self.write("etc/init.d/rcS", b"# local services")
+        self.write("fake-uname", b"#!/bin/sh\necho different\n", 0o755)
+        self.write("sys/class/mtd/mtd2/size", b"other")
+        self.write("proc/meminfo", b"MemFree: 128 kB\n")
+        _, run = self.apply("install")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("actual_kernel=different", self.result())
+        self.assertEqual((self.root / "etc/init.d/rcS").read_bytes(), b"# local services")
 
     def test_service_survives_native_failure_and_next_boot(self):
         ident = self.package("install", native=b"exit 1\n", installed_restore=True, service=True)
@@ -1149,7 +1147,7 @@ echo "/dev/root 13107200 0 $free 0% /"
 
     def test_reject_wrong_product(self):
         self.write("etc/box_product_type", b"U2W\n")
-        self.assert_rejected_unchanged("UNSUPPORTED_OEM_PROFILE")
+        self.assert_rejected_unchanged("UNSUPPORTED_PRODUCT")
 
     def test_metadata_preserved_through_oem_install_and_restore(self):
         self.write("etc/module_version/foo", b"original\n")
@@ -1192,77 +1190,28 @@ echo "/dev/root 13107200 0 $free 0% /"
         self.apply("restore-oem", version="test-2")
         self.assertEqual(self.snapshot(), before)
 
-    def test_generated_hook_accepts_both_profiles_and_rejects_mixed_files(self):
+    def test_generated_hook_runs_without_oem_profile(self):
         from unittest.mock import patch
         import build_usb
 
-        source = json.loads((ROOT / "src/usb/profile.json").read_text())
-        paths = ("script/update_box.sh", "script/start_main_service.sh")
-        source["oem_files"] = {n: sha((self.root / n).read_bytes()) for n in paths}
-        additional = source["additional_profiles"][0]
-        additional["oem_files"] = dict(source["oem_files"])
-        additional["oem_files"]["script/start_main_service.sh"] = sha(b"new OEM service")
         boot = b"#!/bin/sh\ntouch /tmp/hook-started\n"
         original_read = build_usb.read
 
         def fixture_read(path):
-            if path == ROOT / "src/usb/profile.json":
-                return json.dumps(source).encode()
-            if path == ROOT / "src/usb/boot.sh":
-                return boot
-            return original_read(path)
+            return boot if path == ROOT / "src/usb/boot.sh" else original_read(path)
 
         with patch.object(build_usb, "read", fixture_read):
             generated = installer_inputs()
         self.write("etc/yamaha-sdl/enabled", b"")
         self.write("etc/yamaha-sdl/usb-v1/boot.sh", boot)
         self.write("tmp/test-hook.sh", generated["hook.sh"])
-        for version, service in (
-            ("2026.07.31.1733", b"fixture OEM service\n"),
-            ("2025.10.15.1127", b"new OEM service"),
-        ):
-            self.write("etc/software_version", (version + "\n").encode())
-            self.write("script/start_main_service.sh", service)
-            run = self.run_sandbox('sh /tmp/test-hook.sh; rc=$?; sleep 0.1; exit "$rc"')
-            self.assertEqual(run.returncode, 0, run.stderr)
-            self.assertTrue((self.root / "tmp/hook-started").exists())
-            (self.root / "tmp/hook-started").unlink()
-        self.write("script/start_main_service.sh", b"fixture OEM service\n")
-        run = self.run_sandbox("sh /tmp/test-hook.sh")
-        self.assertNotEqual(run.returncode, 0)
-        self.assertFalse((self.root / "tmp/hook-started").exists())
-
-    def test_additional_profile_selected_as_complete_set(self):
-        self.package("install")
-        self.write("etc/software_version", b"2025.10.15.1127\n")
-        profile = self.root / "tmp/update/tmp/dextend/profile.sh"
-        old = (self.root / "tmp/update/tmp/dextend/OEM.sha256").read_text()
-        self.write("script/start_main_service.sh", b"second profile service\n")
-        new = old.replace(sha(b"fixture OEM service\n"), sha(b"second profile service\n"))
-        with profile.open("a") as f:
-            f.write(
-                "additional_oem_profiles='2025.10.15.1127@" + new.strip().replace("\n", ";") + "'\n"
-            )
-        before = self.snapshot()
-        # Old profile hashes must not be accepted under the new version.
-        self.write("script/start_main_service.sh", b"fixture OEM service\n")
-        mixed = self.snapshot()
-        run = self.run_sandbox("sh /tmp/update/tmp/dextend/transaction.sh")
-        self.assertNotEqual(run.returncode, 0, run.stderr)
-        self.assertIn("UNSUPPORTED_OEM_PROFILE", self.result())
-        self.assertEqual(self.snapshot(), mixed)
-        self.write("script/start_main_service.sh", b"second profile service\n")
-        run = self.run_sandbox("sh /tmp/update/tmp/dextend/transaction.sh")
+        self.write("etc/software_version", b"2024.01.01.1234")
+        run = self.run_sandbox("sh /tmp/test-hook.sh && sleep 0.1 && test -e /tmp/hook-started")
         self.assertEqual(run.returncode, 0, run.stderr)
-        self.assertIn("profile_matches=1", self.result())
 
     def test_reject_low_flash(self):
         self.flash_space(64)
         self.assert_rejected_unchanged("INSUFFICIENT_FLASH")
-
-    def test_reject_low_ram(self):
-        self.write("proc/meminfo", b"MemFree: 128 kB\n")
-        self.assert_rejected_unchanged("INSUFFICIENT_RAM")
 
     def test_reject_malformed_flash_report(self):
         for available in ("", "-1", "4096:0"):
@@ -1270,9 +1219,11 @@ echo "/dev/root 13107200 0 $free 0% /"
                 self.flash_space(available)
                 self.assert_rejected_unchanged("INVALID_MEMORY_REPORT")
 
-    def test_ram_requirement_accepts_exact_boundary(self):
+    def test_install_reports_measured_memory(self):
         self.write("proc/meminfo", b"MemFree: 8192 kB\nBuffers: 4096 kB\nCached: 4096 kB\n")
-        self.apply("install")
+        _, run = self.apply("install")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("ram_reclaimable_estimate_kib=16384", self.result())
 
     def test_reject_readonly_usb(self):
         self.write("proc/mounts", b"/dev/root / jffs2 rw 0 0\n/dev/sda1 /mnt/UPAN vfat ro 0 0\n")
@@ -1298,6 +1249,8 @@ echo "/dev/root 13107200 0 $free 0% /"
         run = self.run_sandbox("sh /tmp/update/tmp/once.sh")
         self.assertNotEqual(run.returncode, 0)
         self.assertEqual(self.snapshot(), before)
+        self.assertIn("detail=DAMAGED_BUNDLE", self.result())
+        self.assertIn("mismatch=release/native-runtime.tar.lzma expected=", self.result())
         self.assertFalse((self.root / "etc/yamaha-sdl").exists())
 
     def test_repeat_same_image_does_not_rewrite_flash(self):
@@ -1437,7 +1390,7 @@ echo "/dev/root 13107200 0 $free 0% /"
         self.assertEqual((self.root / "etc/yamaha-sdl/usb-v1/active").read_text().strip(), "none")
         self.assertFalse((self.root / "etc/yamaha-sdl/usb-v1/releases" / first).exists())
 
-    def test_restore_known_legacy_and_rcs_preserves_identity(self):
+    def test_restore_known_legacy_preserves_rcs_and_identity(self):
         for n, data in self.legacy.items():
             self.write(n, data)
         self.write("script/custom_init.sh", self.legacy_hook)
@@ -1445,7 +1398,7 @@ echo "/dev/root 13107200 0 $free 0% /"
         self.write("etc/private-device-data", b"fixture identity - must remain")
         _, run = self.apply("restore-oem")
         self.assertEqual(run.returncode, 0, run.stderr)
-        self.assertEqual((self.root / "etc/init.d/rcS").read_bytes(), self.stock)
+        self.assertEqual((self.root / "etc/init.d/rcS").read_bytes(), self.ssh)
         self.assertEqual(
             (self.root / "etc/private-device-data").read_bytes(), b"fixture identity - must remain"
         )
@@ -1453,7 +1406,7 @@ echo "/dev/root 13107200 0 $free 0% /"
         backups = list((self.root / "mnt/UPAN").glob("dextend-backup.*/before.tar"))
         self.assertEqual(len(backups), 1)
         with tarfile.open(backups[0]) as t:
-            self.assertEqual(t.extractfile("etc/init.d/rcS").read(), self.ssh)
+            self.assertNotIn("etc/init.d/rcS", t.getnames())
 
     def prepare_web_restore(self):
         state = self.root / "etc/yamaha-sdl/usb-v1"
@@ -1541,9 +1494,12 @@ echo "/dev/root 13107200 0 $free 0% /"
         )
         self.assertEqual(len(list(work.glob("dextend-backup.*/before.tar"))), 1)
 
-    def test_restore_refuses_unknown_legacy_file(self):
+    def test_restore_preserves_unrelated_file(self):
         self.write("etc/yamaha-sdl/unrecognised", b"user data")
-        self.assert_rejected_unchanged("UNKNOWN_LEGACY_FILE", "restore-oem")
+        before = self.snapshot()
+        _, run = self.apply("restore-oem")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(before, self.snapshot())
 
     def test_restore_refuses_unknown_managed_file(self):
         self.apply("install")
@@ -1552,7 +1508,10 @@ echo "/dev/root 13107200 0 $free 0% /"
 
     def test_unknown_rcs_is_never_replaced(self):
         self.write("etc/init.d/rcS", b"foreign init")
-        self.assert_rejected_unchanged("UNKNOWN_RCS", "restore-oem")
+        before = self.snapshot()
+        _, run = self.apply("restore-oem")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(self.snapshot(), before)
 
     def test_release_image_real_oem_finish(self):
         image = getattr(self, "release_image", None)
@@ -1830,7 +1789,7 @@ echo "/dev/root 13107200 0 $free 0% /"
         self.assertEqual({d.name for d in releases.iterdir()}, {second})
         self.assertNotEqual(first, second)
 
-    def test_install_removes_known_legacy_files_and_restores_rcs(self):
+    def test_install_removes_known_legacy_files_and_preserves_rcs(self):
         for name, data in self.legacy.items():
             self.write(name, data)
         self.write("script/custom_init.sh", self.legacy_hook)
@@ -1838,8 +1797,8 @@ echo "/dev/root 13107200 0 $free 0% /"
         self.write("etc/init.d/rcS.dextend-new", self.stock)
         ident, run = self.apply("install")
         self.assertEqual(run.returncode, 0, run.stderr)
-        self.assertEqual((self.root / "etc/init.d/rcS").read_bytes(), self.stock)
-        self.assertFalse((self.root / "etc/init.d/rcS.dextend-new").exists())
+        self.assertEqual((self.root / "etc/init.d/rcS").read_bytes(), self.ssh)
+        self.assertEqual((self.root / "etc/init.d/rcS.dextend-new").read_bytes(), self.stock)
         self.assertFalse((self.root / "etc/wifi-usb").exists())
         self.assertTrue((self.root / "etc/yamaha-sdl/usb-v1/releases" / ident).exists())
 
@@ -2011,9 +1970,22 @@ echo "/dev/root 13107200 0 $free 0% /"
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertFalse((self.root / "etc/yamaha-sdl").exists())
 
-    def test_unknown_subdirectory_rejects_before_restore(self):
+    def test_wifi_usb_owner_marker_survives_install_and_restore(self):
+        self.write("etc/wifi-usb/enabled", b"")
+        self.write("etc/wifi-usb/boot.sh", b"owner service")
+        before = self.snapshot()
+        for mode in ("install", "restore-oem"):
+            _, run = self.apply(mode)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertTrue((self.root / "etc/wifi-usb/enabled").exists())
+        self.assertEqual(self.snapshot(), before)
+
+    def test_restore_preserves_unrelated_directory(self):
         (self.root / "etc/wifi-usb/foreign").mkdir(parents=True)
-        self.assert_rejected_unchanged("UNKNOWN_LEGACY_DIRECTORY", "restore-oem")
+        before = self.snapshot()
+        _, run = self.apply("restore-oem")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(before, self.snapshot())
 
     @unittest.skipUnless(shutil.which("qemu-arm"), "needs qemu-arm")
     def test_backup_with_actual_target_busybox_tar(self):
