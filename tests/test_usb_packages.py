@@ -742,6 +742,56 @@ class TransactionTests(unittest.TestCase):
         )
         self.assert_rejected_unchanged("DAMAGED_INTERRUPTED_RELEASE")
 
+    def test_usb_journal_records_success_and_preserves_it_on_retry(self):
+        self.package("install")
+        run = self.run_sandbox("sh /tmp/update/tmp/once.sh && sh /tmp/update/tmp/finish.sh 0")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        completed = self.result()
+        steps = [line.split()[:2] for line in completed.splitlines() if line.startswith("step=")]
+        self.assertGreater(len(steps), 20)
+        self.assertEqual(len(steps) % 2, 0)
+        for start, end in zip(steps[::2], steps[1::2]):
+            self.assertEqual(start, [end[0], "status=started"])
+            self.assertEqual(end[1], "status=ok")
+        self.assertEqual(steps[-1][0], "step=oem_finish")
+        _, retry = self.apply("install")
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertIn("result=ALREADY_INSTALLED", self.result())
+        archives = list((self.root / "mnt/UPAN").glob("dextend-log.*/DEXTEND-RESULT.txt"))
+        self.assertEqual([p.read_text() for p in archives], [completed])
+
+    def test_failed_history_copy_keeps_previous_usb_report(self):
+        self.package("install")
+        previous = b"DEXTEND USB lab v1\nresult=PREPARED_FOR_BOOT\n"
+        self.write("mnt/UPAN/DEXTEND-RESULT.txt", previous)
+        before = self.snapshot()
+        self.write("fail-archive-copy", b"#!/bin/sh\nexit 1\n", 0o755)
+        run = self.run_sandbox(
+            "sh /tmp/update/tmp/once.sh", [(self.root / "fail-archive-copy", "/usr/bin/cp")]
+        )
+        self.assertNotEqual(run.returncode, 0)
+        self.assertEqual(self.result().encode(), previous)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_usb_journal_survives_worker_killed_during_copy(self):
+        self.package("install")
+        self.write(
+            "interrupt-copy",
+            b"""#!/bin/sh
+case "$1" in */dextend/release/*) kill -KILL "$PPID"; exit 1 ;; esac
+exec /usr/bin/busybox cp "$@"
+""",
+            0o755,
+        )
+        run = self.run_sandbox(
+            "sh /tmp/update/tmp/once.sh", [(self.root / "interrupt-copy", "/usr/bin/cp")]
+        )
+        self.assertNotEqual(run.returncode, 0)
+        report = self.result()
+        self.assertIn("result=WRITING", report)
+        self.assertIn("write_started=1", report)
+        self.assertEqual(report.splitlines()[-1], "step=copy_release_files status=started")
+
     def test_competing_installer_cannot_steal_report_or_lock(self):
         ident = self.package("install")
         self.write(
@@ -794,6 +844,8 @@ cat /tmp/first.log /tmp/second.log
     def test_report_io_failure_records_phase_without_flash_writes(self):
         for phase in ("create", "sync_before_rename", "rename", "sync_after_rename"):
             with self.subTest(phase=phase):
+                # Inject failure into publication of this report, not archival of the prior attempt.
+                (self.root / "mnt/UPAN/DEXTEND-RESULT.txt").unlink(missing_ok=True)
                 marker = self.root / "tmp/failure-count"
                 if marker.exists():
                     marker.unlink()

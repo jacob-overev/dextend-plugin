@@ -100,6 +100,23 @@ write_report() {
     }
 }
 
+# Each checkpoint is committed to the same USB report before its operation begins.
+# A power cut thus leaves the unfinished step visible without relying on EXIT.
+step=
+checkpoint() {
+    [ "$transport" = usb ] || return 0
+    [ -z "$step" ] || printf 'step=%s status=ok\n' "$step" >>"$probe_log"
+    step=$1
+    printf 'step=%s status=started\n' "$step" >>"$probe_log"
+    saved_result=$result
+    saved_detail=$detail
+    [ "$write_started" = 0 ] || result=WRITING
+    detail=STEP_IN_PROGRESS
+    write_report || reject USB_REPORT_FAILED
+    result=$saved_result
+    detail=$saved_detail
+}
+
 finish_exit() {
     rc=$?
     trap - EXIT HUP INT TERM
@@ -108,7 +125,19 @@ finish_exit() {
         detail=PREFLIGHT_FAILED_NO_FLASH_WRITES
     fi
     if [ "$transport" = web ] && [ "$write_started" = 0 ]; then result=REJECTED; fi
-    [ "$report_owner" = 0 ] || write_report || true
+    if [ "$report_owner" = 1 ]; then
+        if [ -n "$step" ]; then
+            case "$result" in
+                FILES_COMMITTED | ALREADY_INSTALLED | PROBE_OK) step_status=ok ;;
+                *) step_status=failed ;;
+            esac
+            printf 'step=%s status=%s detail=%s\n' "$step" "$step_status" "$detail" >>"$probe_log" || true
+            if [ "$result" = FILES_COMMITTED ]; then
+                printf 'step=oem_finish status=started\n' >>"$probe_log" || true
+            fi
+        fi
+        write_report || rc=1
+    fi
     [ -z "$restore_work" ] || rm -rf "$restore_work"
     [ "$locked" = 0 ] || rmdir /tmp/dextend-usb-lock 2>/dev/null || true
     exit "$rc"
@@ -134,7 +163,6 @@ put() {
     sync
 }
 get() { regular "$s/$1" && cat "$s/$1"; }
-. "$p/profile.sh"
 if [ "${1:-}" = finish ]; then
     report_owner=1
     write_started=1
@@ -147,6 +175,8 @@ if [ "${1:-}" = finish ]; then
         result=UPDATER_ERROR_AFTER_COMMIT
         detail=DO_NOT_REINSTALL_BLINDLY_READ_STATE
     fi
+    case "$result" in UPDATER_ERROR_AFTER_COMMIT) outcome=failed ;; *) outcome=ok ;; esac
+    printf 'step=oem_finish status=%s detail=%s\n' "$outcome" "$detail" >>"$probe_log"
     write_report
     exit 0
 fi
@@ -161,9 +191,6 @@ fi
 report_owner=1
 rm -f "$probe_log"
 : >"$probe_log"
-for n in sha256sum awk cat cp mv rm mkdir rmdir sync tar df find grep sed wc uname mktemp chmod; do
-    command -v "$n" >/dev/null || { echo "missing_tool=$n" >>"$probe_log"; reject MISSING_TOOL; }
-done
 [ -d /tmp ] && [ ! -L /tmp ] && [ -d /etc ] && [ ! -L /etc ] && [ -d /script ] && [ ! -L /script ] || reject BAD_ROOT
 if [ "$transport" = ota ] || [ "$transport" = replace-ota ]; then
     [ -d "$backup_root" ] && [ ! -L "$backup_root" ] || reject BAD_OTA_PATH
@@ -176,7 +203,35 @@ fi
 [ ! -L "$report" ] || reject REPORT_SYMLINK
 result=CHECKING
 detail=NO_FLASH_WRITES_YET
-write_report || reject USB_REPORT_FAILED
+if [ "$transport" = usb ] && regular "$report" && grep -q '^DEXTEND USB' "$report"; then
+    # Preserve the last attempt, including its last durable step after a power cut.
+    report_owner=0
+    archive=$(mktemp -d "$backup_root/dextend-log.XXXXXX") || exit 1
+    cp "$report" "$archive/DEXTEND-RESULT.txt" && sync || exit 1
+    report_owner=1
+fi
+if [ "$transport" = usb ]; then
+    checkpoint installer_tools
+else
+    write_report || reject USB_REPORT_FAILED
+fi
+for n in sha256sum awk cat cp mv rm mkdir rmdir sync tar df find grep sed wc uname mktemp chmod; do
+    command -v "$n" >/dev/null || { echo "missing_tool=$n" >>"$probe_log"; reject MISSING_TOOL; }
+done
+if [ "${1:-}" = usb-bundle ]; then
+    checkpoint verify_package
+    matches "$p/BUNDLE.sha256" "$2" || reject DAMAGED_BUNDLE_MANIFEST
+    if ! (cd "$p" && sha256sum -c BUNDLE.sha256 >/dev/null); then
+        while read -r expected path; do
+            actual=missing_or_unreadable
+            if regular "$p/$path"; then actual=$(sha "$p/$path"); fi
+            [ "$actual" = "$expected" ] || printf 'mismatch=%s expected=%s actual=%s\n' "$path" "$expected" "$actual" >>"$probe_log"
+        done <"$p/BUNDLE.sha256"
+        reject DAMAGED_BUNDLE
+    fi
+fi
+. "$p/profile.sh"
+checkpoint identify_adapter
 profile_ok=1
 check_value() {
     if ! regular "$1" || [ "$(cat "$1")" != "$2" ]; then
@@ -262,6 +317,7 @@ if [ "$mode" = probe ]; then
     # Deliberate abort: prevent OEM copying and deletion of module_version.
     exit 1
 fi
+checkpoint check_filesystem_and_install_paths
 if exists /etc/module_version; then
     [ ! -L /etc/module_version ] && { [ -f /etc/module_version ] || [ -d /etc/module_version ]; } || reject OEM_MODULE_METADATA_UNSAFE
 fi
@@ -323,6 +379,7 @@ if exists "$s"; then
         ! exists "$hook" || reject MISSING_OEM_BASELINE
     fi
 fi
+checkpoint check_radio_configuration
 restore_reserve_kib=64
 if exists "$s/radio"; then
     radio_restore_kib=$(sh "$p/radio-names.sh" budget) || reject INVALID_RADIO_NAMES
@@ -345,6 +402,7 @@ if exists "$service"; then
         esac
     done
 fi
+checkpoint inspect_existing_installation
 # Only consider known Dextend paths. Other entries can coexist with the addon.
 legacy_install=0
 matches "$hook" "$legacy_hook" && legacy_install=1
@@ -458,6 +516,7 @@ if [ "$mode" = install ]; then
         (cd "$s/releases/$current" && sha256sum -c SHA256SUMS >/dev/null) || reject DAMAGED_INTERRUPTED_RELEASE
     fi
     # Dextend capacity and integrity preflight. Finish it before removing the installed addon.
+    checkpoint verify_release_and_space
     matches "$p/release/SHA256SUMS" "$release" || reject BAD_NEW_RELEASE_MANIFEST
     (cd "$p/release" && sha256sum -c SHA256SUMS >/dev/null) || reject DAMAGED_NEW_RELEASE
     bytes=$(wc -c <"$p/release/native-runtime.tar.lzma")
@@ -539,6 +598,7 @@ prepare_installed_restore() {
 }
 use_installed_restore=0
 if [ "$replace_existing" = 1 ]; then
+    checkpoint prepare_previous_uninstaller
     prepare_installed_restore
     if [ -n "$restore_work" ] && [ -f "$restore_work/update-protocol" ]; then use_installed_restore=1; fi
 fi
@@ -585,6 +645,7 @@ verify_oem() {
         ! exists "$s" && ! exists "$service" && ! exists /etc/yamaha-sdl/enabled || reject RESTORE_READBACK_FAILED
 }
 install_fresh() {
+    checkpoint create_install_state
     mkdir -p "$s/releases"
     cp "$p/format" "$s/format"
     cp "$p/empty" "$s/original-hook-absent"
@@ -594,35 +655,44 @@ install_fresh() {
     put transaction "$release"
     target=$s/releases/$release
     mkdir "$target"
+    checkpoint copy_release_files
     cp "$p/release/"* "$target/"
     chmod 700 "$target/native-boot.sh"
+    checkpoint verify_written_release
     matches "$target/SHA256SUMS" "$release" || reject RELEASE_MANIFEST_WRITE_FAILED
     (cd "$target" && sha256sum -c SHA256SUMS >/dev/null) || reject RELEASE_WRITE_FAILED
     sync
+    checkpoint configure_service
     if regular "$target/service-runtime.tar.lzma"; then
         mkdir "$service"
         chmod 700 "$service"
         printf 'dextend-service-v1\n' >"$service/format"
         put service-release "$release"
     fi
+    checkpoint apply_radio_names
     sh "$p/radio-names.sh" apply || radio_reject RADIO_NAMES_FAILED
+    checkpoint record_pending_release
     put previous none
     put pending "$release"
     put active "$release"
     cp "$p/empty" /etc/yamaha-sdl/enabled
+    checkpoint stage_startup_script
     cp "$p/hook.sh" /script/custom_init.sh.dextend-new
     chmod 755 /script/custom_init.sh.dextend-new
     matches /script/custom_init.sh.dextend-new "$hook_sha" || reject HOOK_WRITE_FAILED
     put status PREPARED_FOR_BOOT
     rm -f "$s/transaction"
     sync
+    checkpoint activate_startup_script
     mv /script/custom_init.sh.dextend-new "$hook"
     sync
+    checkpoint verify_startup_script
     matches "$hook" "$hook_sha" || reject HOOK_READBACK_FAILED
 }
 
 if [ "$use_installed_restore" = 0 ]; then
     # No persistent changes precede this point. Verify the inverse copy first.
+    checkpoint create_backup
     backup=$(mktemp -d "$backup_root/dextend-backup.XXXXXX") || reject BACKUP_FAILED
     # OEM BusyBox rejects empty archives. Always include our non-private format
     # marker, so first install (OEM hook absent) also produces a verifiable backup.
@@ -631,6 +701,7 @@ if [ "$use_installed_restore" = 0 ]; then
         if regular "/etc/$n"; then printf 'etc/%s\n' "$n" >>/tmp/dextend-backup-full; fi
     done
     (cd / && tar -cf "$backup/before.tar" -T /tmp/dextend-backup-full "${p#/}/format") || reject BACKUP_FAILED
+    checkpoint verify_backup
     tar -tf "$backup/before.tar" >/dev/null || reject BACKUP_UNREADABLE
     (cd "$backup" && sha256sum before.tar >SHA256SUMS && sync && sha256sum -c SHA256SUMS >/dev/null) || reject BACKUP_VERIFY_FAILED
     cp /tmp/dextend-backup-full "$backup/paths.txt"
@@ -638,6 +709,7 @@ if [ "$use_installed_restore" = 0 ]; then
 fi
 # Do this while Debug still runs and before the old remover changes flash.
 # Older releases did not stop the native receiver during removal.
+checkpoint stop_runtime_for_write
 sh "$p/radio-names.sh" quiesce || reject RADIO_CONFIG_IN_USE
 write_started=1
 result=ERROR_AFTER_WRITE
@@ -648,7 +720,9 @@ if [ "$transport" = web ]; then
     result=ERROR_AFTER_WRITE
 fi
 if [ "$mode" = restore-oem ]; then
+    checkpoint restore_oem_files
     restore_oem
+    checkpoint verify_oem_state
     verify_oem
 else
     if [ "$replace_existing" = 1 ]; then
@@ -657,6 +731,7 @@ else
         write_report || reject USB_REPORT_FAILED
         result=ERROR_AFTER_WRITE
         detail=RESTORE_INTERRUPTED_CHECK_BACKUP_AND_STATE
+        checkpoint remove_previous_release
         if [ "$use_installed_restore" = 1 ]; then
             restore_transport=replace
             [ "$transport" != ota ] || restore_transport=replace-ota
@@ -674,12 +749,14 @@ else
             restore_oem
         fi
     fi
+    checkpoint verify_oem_state
     verify_oem
     result=WRITING
     detail=INSTALLING_FRESH_FROM_OEM
     write_report || reject USB_REPORT_FAILED
     result=ERROR_AFTER_WRITE
     detail=INSTALL_INTERRUPTED_RETRY_SAME_IMG
+    checkpoint check_final_free_space
     available_after_restore=$(df -Pk /etc | awk 'END {print $4}')
     case "$available_after_restore" in '' | *[!0-9]*) reject INVALID_MEMORY_REPORT ;; esac
     [ "$available_after_restore" -ge "$required_kib" ] || reject OEM_RESTORED_INSUFFICIENT_FLASH

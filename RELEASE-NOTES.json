@@ -1,10 +1,8 @@
 {
   "pl": [
-    "Instalacja USB na A15W zachowuje własny skrypt rcS i ustawienia SSH oraz Telnet. Wersja firmware i sumy programów producenta nie blokują instalacji.",
-    "Raport instalatora podaje wersję firmware, kernel, architekturę i miejsce potrzebne na dodatek."
+    "Instalator USB zapisuje kolejne etapy do DEXTEND-RESULT.txt na pendrivie. Raport po sukcesie zawiera cały przebieg. Przy ponowieniu instalator zachowuje poprzedni raport w katalogu dextend-log.*."
   ],
   "en": [
-    "USB installation on A15W preserves custom rcS, SSH and Telnet settings. The firmware version and OEM program checksums no longer block installation.",
-    "The installer report includes the firmware version, kernel, architecture and space needed for the plugin."
+    "The USB installer writes each stage to DEXTEND-RESULT.txt on the drive, including completed installations. A new attempt preserves the previous report in a dextend-log.* directory."
   ]
 }

@@ -123,6 +123,9 @@ def sequence_from_image(image):
 
 
 def installer_entry(checks, mode, version):
+    worker_sha = next(
+        line.split()[0] for line in checks.decode().splitlines() if line.endswith("  transaction.sh")
+    )
     return f"""#!/bin/sh
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -137,9 +140,14 @@ bundle_error() {{
     [ -d "$usb" ] && [ ! -L /mnt ] && [ ! -L "$usb" ] && [ ! -L "$target" ] || exit 1
     [ ! -e "$target" ] || [ -f "$target" ] || exit 1
     grep -q ' /mnt/UPAN vfat rw' /proc/mounts || exit 1
+    if [ -f "$target" ] && grep -q '^DEXTEND USB' "$target"; then
+        archive=$(mktemp -d "$usb/dextend-log.XXXXXX") || exit 1
+        cp "$target" "$archive/DEXTEND-RESULT.txt" && sync || exit 1
+    fi
     stage=$(mktemp "$usb/.dextend-result.XXXXXX") || exit 1
     trap 'rm -f "$stage"; rmdir /tmp/dextend-usb-lock' EXIT
     printf 'DEXTEND USB v2\\noperation={mode}\\nversion={version}\\nresult=REJECTED\\ndetail=%s\\nwrite_started=0\\n' "$1" >"$stage"
+    printf 'step=verify_installer status=failed\\n' >>"$stage"
     if [ "$1" = DAMAGED_BUNDLE ]; then
         while read -r expected path; do
             actual=missing_or_unreadable
@@ -153,9 +161,12 @@ bundle_error() {{
     sync
     exit 1
 }}
-[ -f BUNDLE.sha256 ] && [ ! -L BUNDLE.sha256 ] && [ "$(sha256sum BUNDLE.sha256 | awk '{{print $1}}')" = {sha(checks)} ] || bundle_error DAMAGED_BUNDLE_MANIFEST
-sha256sum -c BUNDLE.sha256 >/dev/null || bundle_error DAMAGED_BUNDLE
-sh ./transaction.sh
+# The verified worker records progress while checking the rest of the package.
+if [ ! -f transaction.sh ] || [ -L transaction.sh ] || [ "$(sha256sum transaction.sh | awk '{{print $1}}')" != {worker_sha} ]; then
+    [ -f BUNDLE.sha256 ] && [ ! -L BUNDLE.sha256 ] && [ "$(sha256sum BUNDLE.sha256 | awk '{{print $1}}')" = {sha(checks)} ] || bundle_error DAMAGED_BUNDLE_MANIFEST
+    bundle_error DAMAGED_BUNDLE
+fi
+sh ./transaction.sh usb-bundle {sha(checks)}
 # The OEM success path deletes /etc/module_version after finish.sh.
 # Our transaction already installed/restored and verified every persistent file.
 # Stop that path explicitly, keeping factory metadata untouched.
@@ -401,7 +412,8 @@ Na pendrivie FAT32 umieść tylko JEDEN obraz, jako A15W_Update.img w katalogu g
 Nie kopiuj wszystkich trzech obrazów naraz. Sprawdź SHA256SUMS przed użyciem.
 Zasil dongla stabilnym zasilaczem USB poza motocyklem; po starcie włóż pendrive.
 Podczas zapisu nie wyjmuj nośnika ani nie odłączaj zasilania.
-Wynik: DEXTEND-RESULT.txt. FILES_COMMITTED oznacza, że updater jeszcze pracuje.
+Na pendrivie DEXTEND-RESULT.txt zawiera wynik oraz chronologiczny przebieg każdej rozpoczętej fazy instalatora.
+Poprzedni raport jest zachowywany w osobnym katalogu dextend-log.*. FILES_COMMITTED oznacza, że updater jeszcze pracuje.
 PREPARED_FOR_BOOT / OEM_RESTORED_RESTART_REQUIRED oznacza sprawdzony zapis.
 Jeżeli istnieje module_version, detail=EXPECTED_OEM_ERROR_METADATA_PRESERVED_POWER_CYCLE
 oznacza celowe zatrzymanie OEM po zapisie, aby zachować metadane. W tym jednym
