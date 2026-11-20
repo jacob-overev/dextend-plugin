@@ -67,6 +67,23 @@ static void marker(const char *name, const char *value)
         fclose(f);
     }
 }
+/* Short monotonic milestones for the ordinary diagnostic report. */
+static void projection_event(const char *stage)
+{
+    char path[4096];
+    if (!runtime_dir || snprintf(path, sizeof(path), "%s/projection-events", runtime_dir) >=
+                            (int)sizeof(path))
+        return;
+    int fd = open(path, O_WRONLY | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_CREAT, 0600);
+    if (fd < 0)
+        return;
+    if (lseek(fd, 0, SEEK_END) < 8192 || !ftruncate(fd, 0)) {
+        uint64_t ms = mono_ms();
+        dprintf(fd, "%llu.%03u %s %s\n", (unsigned long long)(ms / 1000),
+                (unsigned)(ms % 1000), aa_mode ? "AA" : "CP", stage);
+    }
+    close(fd);
+}
 static int marked(const char *name)
 {
     char path[4096];
@@ -503,8 +520,10 @@ static void log_rpc(const unsigned char *p, size_t n)
         const char *j = (const char *)(p + 12);
         int was_full = hmi_full;
         hmi_full = json_top_equals(j, json_size, "hmiLevel", "\"FULL\"");
-        if (hmi_full != was_full)
+        if (hmi_full != was_full) {
+            projection_event(hmi_full ? "HMI_FULL" : "HMI_LEFT");
             invalidate_video();
+        }
         if (hmi_full && !was_full) {
             /* Navigation re-entry is an explicit retry trigger for missing
              * essential subscriptions, without duplicating successful ones. */
@@ -581,6 +600,7 @@ static void process_frame(const unsigned char *p, size_t n)
         video_source = 0;
         video_deadline = 0;
         invalidate_video();
+        projection_event("VIDEO_SERVICE_ACK");
         event("STAGE", "VIDEO_SERVICE_ACK: ready to send H.264");
     } else if (svc == 11 && kind == 0 && info == 3) {
         event("STAGE", "VIDEO_SERVICE_NAK");
@@ -957,6 +977,10 @@ static uint64_t aa_back_at;
 /* 0 active, 1 phone yielded video focus, 2 awaiting a fresh resume IDR. */
 static unsigned aa_video_focus;
 static uint64_t aa_resume_at;
+/* One focus request before the first picture, after an OEM video-state event.
+ * An explicit focus yield cancels it for the lifetime of this AA client. */
+static int aa_initial_focus_allowed;
+static uint64_t aa_initial_focus_at;
 static void forward_button(unsigned preset)
 {
     if (preset > 6)
@@ -967,6 +991,8 @@ static void forward_button(unsigned preset)
         event("INPUT", "PRESET_6 action=HOME_NOTIFICATION; no CarPlay HID command");
         uint64_t now = mono_ms();
         if (aa_mode && aa_video_focus == 1) {
+            aa_initial_focus_at = 0;
+            aa_initial_focus_allowed = 0;
             aa_video_focus = 2;
             aa_resume_at = now;
             event("STAGE", "AA_VIDEO_RESUME requested_by=navigation_return");
@@ -1017,6 +1043,8 @@ static void forward_button(unsigned preset)
             int result = ipc_send(&clients[i], packet, sizeof(packet));
             aa_back_at = preset == 0 && !home && !resume && !result ? now : 0;
             if (resume && !result) {
+                aa_initial_focus_at = 0;
+                aa_initial_focus_allowed = 0;
                 aa_video_focus = 2;
                 aa_resume_at = now;
                 invalidate_video();
@@ -1127,9 +1155,14 @@ static int aa_start(struct ipc_client *c, unsigned check)
     if (aa_mode == 2)
         memcpy(p + 40, aa_peer, 17);
     aa_header_zero = !check;
+    aa_initial_focus_allowed = 1;
+    aa_initial_focus_at = 0;
     event("STAGE", "AA_START_LINK mode=%u view=%ux%u fps=30", aa_mode, aa_geometry.width,
           aa_geometry.height);
-    return ipc_send(c, p, sizeof(p));
+    int result = ipc_send(c, p, sizeof(p));
+    if (!result)
+        projection_event("AA_LINK_REQUEST");
+    return result;
 }
 /* Only raise the observed High-profile level 3.0 declaration to 3.1.
    No encoding parameters or slice bytes change; never lower a level. */
@@ -1235,14 +1268,14 @@ static void invalidate_video(void)
 
 static int request_keyframe(void)
 {
-    if (aa_mode && aa_video_focus == 1)
-        return 0; /* Respect a deliberate exit until user input. */
-    if (!carplay_ready ||
-        (!source_probe_at && (!video_ack || !hmi_full || (live_synced && !refresh_requested))))
+    uint64_t ms = mono_ms();
+    int initial = aa_mode && aa_initial_focus_at && ms >= aa_initial_focus_at &&
+                  registered && hmi_full && video_ack && !video_ending;
+    if (!initial && aa_mode && aa_video_focus == 1)
         return 0;
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    uint64_t ms = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    if (!initial && (!carplay_ready ||
+        (!source_probe_at && (!video_ack || !hmi_full || (live_synced && !refresh_requested)))))
+        return 0;
     /* Keep displaying the card while the phone settles. Do not change codec
        until a complete, fresh IDR proves the source can supply a picture. */
     if (!source_probe_at && smooth_transitions && video_source == 1 &&
@@ -1265,7 +1298,17 @@ static int request_keyframe(void)
         ssize_t n = ipc_send(&clients[i], packet, sizeof(packet)) ? -1 : (ssize_t)sizeof(packet);
         /* A liveness probe accepts any valid video reply. It must not start
            the independent decoder synchronization deadline. */
-        if (!source_probe_at && !idr_wait_since && (!live_synced || refresh_requested))
+        if (initial) {
+            aa_initial_focus_at = 0;
+            aa_initial_focus_allowed = 0;
+            if (n >= 0 && aa_video_focus == 1) {
+                aa_video_focus = 2;
+                aa_resume_at = ms;
+            }
+            projection_event(n >= 0 ? "INITIAL_VIDEO_REQUEST" : "INITIAL_REQUEST_FAILED");
+            event("STAGE", "AA_INITIAL_VIDEO_REQUEST queued=%d", n >= 0);
+        }
+        if (!initial && !source_probe_at && !idr_wait_since && (!live_synced || refresh_requested))
             idr_wait_since = ms;
         last_keyframe_request_ms = ms;
         event("STAGE", "CARPLAY_REQUEST_KEYFRAME command=12 sent=%zd", n);
@@ -1380,8 +1423,10 @@ static int live_packet(unsigned command, const unsigned char *p, size_t n)
         }
         source_video_at = mono_ms();
         source_probe_at = 0;
-        if (!carplay_ready)
+        if (!carplay_ready) {
+            projection_event("SOURCE_VIDEO");
             phone_ready_since = mono_ms();
+        }
         carplay_ready = 1; /* A real video packet also proves wireless source readiness. */
         if (smooth_transitions && video_ack && hmi_full && video_source == 1 &&
             mono_ms() - phone_ready_since >= 2000 && has_nal(p, n, 5) &&
@@ -1416,9 +1461,14 @@ static int live_packet(unsigned command, const unsigned char *p, size_t n)
                 ccu_failed = 1;
                 return 0;
             }
-            if (result > 0)
+            if (result > 0 || video_guard_blocked)
                 return 0;
+            if (aa_mode) {
+                aa_initial_focus_allowed = 0;
+                aa_initial_focus_at = 0;
+            }
             if (!live_synced) {
+                projection_event("IDR_QUEUED");
                 startup_refresh_at = aa_mode ? 0 : mono_ms() + startup_refresh_ms;
                 event("STAGE", "LIVE_CARPLAY_IDR bytes=%zu dropped_before_start=%lu", n,
                       live_dropped);
@@ -1514,6 +1564,8 @@ static void close_client(struct ipc_client *c)
         source_sequence_path = NULL;
     }
     if (aa_mode && c->type == 5) {
+        aa_initial_focus_at = 0;
+        aa_initial_focus_allowed = 0;
         aa_video_focus = 0;
         aa_resume_at = 0;
         aa_back_at = 0;
@@ -1706,7 +1758,16 @@ static int live_pending(void)
                     unsigned control = le32(body + 8);
                     /* OEM onVideoFocusChanged(2) emits 3; non-ignored
                      * onVideoStateChanged emits 500 (start) / 501 (stop). */
+                    if (control == 3) {
+                        aa_initial_focus_at = 0;
+                        aa_initial_focus_allowed = 0;
+                    } else if ((control == 500 || control == 501) &&
+                               aa_initial_focus_allowed && !aa_initial_focus_at) {
+                        aa_initial_focus_at = mono_ms() + 2000;
+                    }
                     if (control == 3 || (control == 501 && aa_video_focus != 2)) {
+                        if (aa_video_focus != 1)
+                            projection_event(control == 3 ? "FOCUS_YIELDED" : "VIDEO_STOP");
                         aa_video_focus = 1;
                         aa_resume_at = 0;
                         aa_back_at = 0;
@@ -1943,6 +2004,8 @@ static void auto_phone_tick(uint64_t now)
                                    clients[i].type == 32 || clients[i].type == 34))
             close_client(&clients[i]);
     aa_mode = mode;
+    aa_initial_focus_at = 0;
+    aa_initial_focus_allowed = 0;
     aa_video_focus = 0;
     aa_resume_at = 0;
     aa_back_at = 0;

@@ -103,7 +103,7 @@ static int reply(int fd, unsigned serial)
                 return -1;
         }
         if (answer == serial)
-            return h[1] == 2 ? 0 : -1;
+            return h[1] == 3 ? 1 : (h[1] == 2 ? 0 : -1);
     }
     return -1;
 }
@@ -194,12 +194,16 @@ int main(int argc, char **argv)
         call = message;
         label = "FORGET";
     } else if (argc == 4 && !strcmp(argv[1], "--connect")) {
-        if (strlen(argv[2]) != 17 || (strcmp(argv[3], "IAP2") && strcmp(argv[3], "AAP")))
+        int discover_profile = !strcmp(argv[3], "AUTO");
+        if (strlen(argv[2]) != 17 ||
+            (!discover_profile && strcmp(argv[3], "IAP2") && strcmp(argv[3], "AAP")))
             return 2;
         for (unsigned i = 0; i < 17; i++)
             if (i % 3 == 2 ? argv[2][i] != ':' : !strchr("0123456789abcdefABCDEF", argv[2][i]))
                 return 2;
-        call_size = request(message, "Connect", argv[2], argv[3]);
+        /* An empty second D-Bus string selects OEM service discovery for
+         * this address. Omitting it would change the method signature. */
+        call_size = request(message, "Connect", argv[2], discover_profile ? "" : argv[3]);
         call = message;
         label = "CONNECT";
     } else if (argc != 1)
@@ -239,8 +243,13 @@ int main(int argc, char **argv)
         return 3;
     if (all(fd, (void *)hello, sizeof(hello), 1) || reply(fd, 1))
         return 4;
-    if (all(fd, (void *)call, call_size, 1) || reply(fd, 2))
-        return 5;
+    /* After sending Connect the phone can still answer even if we lose
+     * the local reply. Reserve code 5 for an explicit D-Bus method error. */
+    if (all(fd, (void *)call, call_size, 1))
+        return 6;
+    int result = reply(fd, 2);
+    if (result)
+        return result > 0 ? 5 : 6;
     close(fd);
     printf("STAGE BLUETOOTH_%s accepted=1; connection_not_yet_confirmed\n", label);
     return 0;

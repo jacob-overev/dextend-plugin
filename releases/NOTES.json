@@ -1,8 +1,14 @@
 {
   "pl": [
-    "Instalator USB zapisuje kolejne etapy do DEXTEND-RESULT.txt na pendrivie. Raport po sukcesie zawiera cały przebieg. Przy ponowieniu instalator zachowuje poprzedni raport w katalogu dextend-log.*."
+    "Po włączeniu zapłonu dongiel automatycznie próbuje połączyć się z pierwszym telefonem na liście priorytetów.",
+    "Gdy telefon nie odpowiada, dongiel przechodzi do kolejnego. Po przejściu listy wraca na jej początek, stopniowo wydłużając odstępy między próbami dla tego samego telefonu.",
+    "CarPlay szybciej reaguje na połączenie Bluetooth z iPhone’em. Android Auto dostaje więcej czasu, gdy telefon już odpowiedział przez Bluetooth.",
+    "Podczas aktywnej sesji dongiel wstrzymuje próby łączenia z innymi telefonami. Po rozłączeniu znów szuka telefonu według priorytetu."
   ],
   "en": [
-    "The USB installer writes each stage to DEXTEND-RESULT.txt on the drive, including completed installations. A new attempt preserves the previous report in a dextend-log.* directory."
+    "When the ignition comes on, the adapter automatically tries the first phone in the priority list.",
+    "If a phone does not respond, the adapter tries the next one. It returns to the top of the list after each round and gradually waits longer between retries for the same phone.",
+    "CarPlay responds sooner when the iPhone opens its Bluetooth channel. Android Auto gets more time to connect once the phone responds over Bluetooth.",
+    "While a session is active, the adapter pauses attempts to connect to other phones. After disconnection, it resumes in priority order."
   ]
 }

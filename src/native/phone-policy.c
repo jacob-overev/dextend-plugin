@@ -298,6 +298,8 @@ static void load(void)
 }
 static int group(const struct phone *p)
 {
+    if (!strcmp(preferred, "none"))
+        return 0;
     if (!*p->service)
         return 2;
     return (!strcmp(preferred, "carplay") && strcmp(p->service, "IAP2")) ||
@@ -507,8 +509,7 @@ int main(int argc, char **argv)
     }
     if (argc == 2 && !strcmp(argv[1], "--candidates")) {
         for (unsigned i = 0; i < count; i++)
-            if (*phones[i].service)
-                printf("%s %s\n", phones[i].id, phones[i].service);
+            printf("%s %s\n", phones[i].id, *phones[i].service ? phones[i].service : "AUTO");
         return 0;
     }
     if (argc == 4 && !strcmp(argv[1], "--choose")) {

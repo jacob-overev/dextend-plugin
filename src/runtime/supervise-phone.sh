@@ -15,7 +15,9 @@ child=
 trap '[ -z "$child" ] || kill "$child" 2>/dev/null || true' EXIT
 trap 'exit 0' INT TERM
 while [ -f /etc/yamaha-sdl/enabled ]; do
-    sleep 2
+    if [ "${YAMAHA_PHONE_AUTO:-0}" != 1 ] || ! ./receiver-native --wait-carplay; then
+        sleep 2
+    fi
     [ -S "${YAMAHA_CARPLAY_SOCKET:-/tmp/yamaha-sdl/carplay-ipc.sock}" ] || continue
     read -r uptime rest </proc/uptime
     now=${uptime%%.*}

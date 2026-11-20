@@ -19,7 +19,8 @@ cc=${YAMAHA_MUSL_PREFIX:?Build the pinned musl toolchain first}/bin/musl-gcc
 mkdir -p "$out/third-party"
 # ARM Linux on the adapter uses 4 KiB pages. Avoid 64 KiB ELF segment gaps.
 page_size=-Wl,-z,max-page-size=4096,-z,common-page-size=4096
-"$cc" -static "$page_size" -ffunction-sections -fdata-sections -Wl,--gc-sections -O2 -std=c11 -Wall -Wextra -Werror -march=armv7-a \
+# Thumb-2 keeps the projection bridge within the one-MiB runtime archive.
+"$cc" -static "$page_size" -ffunction-sections -fdata-sections -Wl,--gc-sections -O2 -std=c11 -Wall -Wextra -Werror -march=armv7-a -mthumb \
     -Wl,-Map,"$out/yamaha-sdl-live.map" -o "$out/yamaha-sdl-live" "$src/src/native/probe.c"
 "$cc" -static "$page_size" -O2 -Wall -Wextra -Werror -o "$out/iphone-usb-role" "$src/src/native/iphone-usb-role.c"
 "$cc" -static "$page_size" -Os -Wall -Wextra -Werror -o "$out/bluetooth-autoconnect" "$src/src/native/bluetooth-autoconnect.c"
@@ -30,7 +31,8 @@ for name in receiver-native phone-policy; do
         -Wl,--gc-sections -std=c11 -Wall -Wextra -Werror -o "$out/$name" "$src/src/native/$name.c"
 done
 "$cc" -static "$page_size" -Os -std=c11 -Wall -Wextra -Werror -o "$out/waiting-frame" "$src/src/native/waiting-frame.c"
-"$cc" -static "$page_size" -Os -std=c11 -ffunction-sections -fdata-sections -Wl,--gc-sections -Wall -Wextra -Werror \
+# Use the same ARMv7-A Thumb-2 target for the update verifier.
+"$cc" -static "$page_size" -Os -march=armv7-a -mthumb -std=c11 -ffunction-sections -fdata-sections -Wl,--gc-sections -Wall -Wextra -Werror \
     -I"$src/src/native/third-party/monocypher" -o "$out/updater-http" "$src/src/native/updater-http.c" \
     "$src/src/native/third-party/monocypher/monocypher.c" "$src/src/native/third-party/monocypher/monocypher-ed25519.c"
 "$cc" -static "$page_size" -Os -Wall -Wextra -Werror -o "$out/service-key" "$src/src/native/service-key.c"

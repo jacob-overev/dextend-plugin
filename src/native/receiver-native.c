@@ -11,10 +11,12 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/inotify.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -251,8 +253,31 @@ static int private_android_mode(void)
     unlink(temporary);
     return result;
 }
+/* One consumer in the private runtime directory. Register the watch before
+ * checking for a pending grant so an arrival during setup cannot be missed. */
+static int wait_carplay(void)
+{
+    const char *pending = "carplay-wakeup/pending";
+    int fd = inotify_init1(IN_CLOEXEC);
+    if (fd < 0)
+        return 1;
+    int rc = 0;
+    if (inotify_add_watch(fd, "carplay-wakeup", IN_CREATE) < 0) {
+        rc = 1;
+    } else if (unlink(pending) < 0) {
+        struct pollfd event = {.fd = fd, .events = POLLIN};
+        if (errno != ENOENT || poll(&event, 1, 2000) < 0)
+            rc = 1;
+        else if (event.revents & POLLIN)
+            unlink(pending);
+    }
+    close(fd);
+    return rc;
+}
 int main(int argc, char **argv)
 {
+    if (argc == 2 && !strcmp(argv[1], "--wait-carplay"))
+        return wait_carplay();
     if (argc == 2 && !strcmp(argv[1], "--probe")) {
         if (isolate())
             return failed();

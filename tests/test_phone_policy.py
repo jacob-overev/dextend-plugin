@@ -242,6 +242,15 @@ class PolicyTests(unittest.TestCase):
         )
         self.assertEqual(self.run_cli("--choose", A, B).strip(), "carplay")
 
+    def test_missing_profile_keeps_the_bond_in_the_configured_queue(self):
+        (self.root / "tmp/bluetooth/services").write_text(f"{A} AAP\n{B} IAP2\n")
+        for preference, expected in [
+            ("none", [f"{C} AUTO", f"{A} AAP", f"{B} IAP2"]),
+            ("carplay", [f"{B} IAP2", f"{A} AAP", f"{C} AUTO"]),
+        ]:
+            self.post({"schema": 1, "preferred": preference, "order": [C, A, B]})
+            self.assertEqual(self.run_cli("--candidates").splitlines(), expected)
+
     def test_removed_bond_and_corrupt_config_are_safe(self):
         self.post({"schema": 1, "preferred": "carplay", "order": [B, A, C]})
         bt = next((self.root / "tmp/bluetooth").glob("*/linkkeys"))

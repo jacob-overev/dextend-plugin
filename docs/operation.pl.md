@@ -27,6 +27,10 @@ Pierwszą konfigurację wykonaj na postoju.
 2. W polu Preferowana platforma wybierz Według listy, CarPlay albo Android Auto. Pośrednik najpierw spróbuje połączyć się z telefonami z wybranej grupy.
 3. Użyj ↑ Wyżej i ↓ Niżej, żeby zmienić kolejność w grupie. Wybierz Zapisz na donglu. Zmiana zacznie działać przy następnym łączeniu bez przerywania bieżącej sesji.
 
+Po włączeniu zasilania i uruchomieniu Bluetooth dongiel sam próbuje połączyć się z pierwszym telefonem z listy. Przy pustej liście czeka na połączenie rozpoczęte z telefonu. Gdy telefon jest poza zasięgiem lub nie ukończy negocjacji, kolej przechodzi na następny. Po ostatnim dongiel wraca do pierwszego. Po zakończeniu działającej sesji zaczyna od początku listy.
+
+Po kolejnych niepowodzeniach dongiel czeka co najmniej 5, 10, 15, 20, 20, a następnie 30 sekund przed ponowną próbą z tym samym telefonem. W tym czasie może próbować połączyć się z innymi telefonami z listy. Udane połączenie zeruje licznik danego telefonu. W trakcie przerwy możesz rozpocząć połączenie ze smartfona. Dongiel może je przyjąć, gdy telefon otworzy kanał Bluetooth i odbiornik będzie wolny.
+
 ### Debug → Debug / Wi-Fi USB
 
 Zakładka pojawia się, gdy działa usługa sieci serwisowej i jest podłączona osobna karta Wi-Fi USB. Do zwykłego parowania i projekcji wystarczy wbudowane Wi-Fi pośrednika.

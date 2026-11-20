@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 SOURCE = Path(__file__).resolve().parents[1] / "src/native/receiver-native.c"
@@ -114,8 +115,44 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(run.stdout, b"")
 
 
+class CarPlayWakeTests(unittest.TestCase):
+    def test_pending_and_new_grant_wake_the_worker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / "receiver-native"
+            subprocess.run(["cc", "-Os", str(SOURCE), "-o", binary], check=True)
+            wake = root / "carplay-wakeup"
+            wake.mkdir()
+            pending = wake / "pending"
+            cmd = [binary, "--wait-carplay"]
+            pending.touch()
+            subprocess.run(cmd, cwd=root, timeout=1, check=True)
+            self.assertFalse(pending.exists())
+            with subprocess.Popen(cmd, cwd=root) as worker:
+                time.sleep(0.1)
+                self.assertIsNone(worker.poll())
+                pending.touch()
+                self.assertEqual(worker.wait(timeout=1), 0)
+            self.assertFalse(pending.exists())
+            start = time.monotonic()
+            subprocess.run(cmd, cwd=root, timeout=5, check=True)
+            self.assertGreaterEqual(time.monotonic() - start, 1.9)
+
+
 class WirelessLifecycleTests(unittest.TestCase):
     def test_old_wifi_iap2_is_replaced_by_bluetooth_after_receiver_exit(self):
+        self.check_iap2_restart(None, True)
+
+    def test_wireless_priority_filters_bluetooth_iap2_peer(self):
+        for allowed, expected in [("pending", False), ("any", False), ("02:00:00:00:00:BB", False),
+                                  ("02:00:00:00:00:AA 112-1", True)]:
+            with self.subTest(allowed=allowed):
+                self.check_iap2_restart(allowed, expected)
+
+    def test_receiver_replacement_resumes_the_same_iphone_only_once(self):
+        self.check_iap2_restart("02:00:00:00:00:AA 112-1", True, replace_receiver=True)
+
+    def check_iap2_restart(self, allowed, expected, replace_receiver=False):
         import os
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -131,6 +168,7 @@ class WirelessLifecycleTests(unittest.TestCase):
             ]:
                 script = script.replace(original, tmp)
             script = script.replace("/tmp/rfcomm_IAP2", str(root / "rfcomm"))
+            script = script.replace("/sys/class/tty/", str(root / "tty") + "/")
             (root / "step.sh").write_text(script)
             (root / "debug-log.sh").write_text(
                 "debug() { :; }; debug_receiver() { cat >/dev/null; }\n"
@@ -141,11 +179,17 @@ class WirelessLifecycleTests(unittest.TestCase):
             (root / "iap2-wifi-active").touch()
             (root / "wireless-attempt").write_text("0")
             programs = {
-                "pidof": '#!/bin/sh\ncase "$1" in AppleCarPlay) exit 1;; ARMiPhoneIAP2) test -f "$FIXTURE/old-iap2";; *) exit 0;; esac\n',
+                "pidof": '#!/bin/sh\ncase "$1" in AppleCarPlay) test -f "$FIXTURE/apple-alive";; ARMiPhoneIAP2) test -f "$FIXTURE/old-iap2";; *) exit 0;; esac\n',
                 "killall": '#!/bin/sh\ncase "$*" in *ARMiPhoneIAP2*) rm -f "$FIXTURE/old-iap2"; echo stopped >> "$FIXTURE/events";; esac\n',
                 "ps": "#!/bin/sh\nexit 0\n",
                 "receiver-native": '#!/bin/sh\n[ ! -f "$FIXTURE/old-iap2" ] || exit 9\necho "$*" >> "$FIXTURE/events"\n',
             }
+            if allowed is not None:
+                tty = root / "tty/rfcomm1"
+                tty.mkdir(parents=True)
+                (tty / "address").write_text("02:00:00:00:00:aa\n")
+                programs["readlink"] = "#!/bin/sh\necho /dev/rfcomm1\n"
+                (root / "priority-carplay").write_text(allowed + "\n")
             for name, body in programs.items():
                 target = (root if name == "receiver-native" else commands) / name
                 target.write_text(body)
@@ -154,6 +198,7 @@ class WirelessLifecycleTests(unittest.TestCase):
                 os.environ,
                 PATH=str(commands) + ":" + os.environ["PATH"],
                 FIXTURE=tmp,
+                YAMAHA_PHONE_AUTO="1" if allowed is not None else "0",
                 YAMAHA_BT_AUTOCONNECT="0",
             )
             result = subprocess.run(
@@ -163,9 +208,35 @@ class WirelessLifecycleTests(unittest.TestCase):
             events = (root / "events").read_text().splitlines()
             self.assertEqual(events[0], "stopped")
             self.assertTrue(any("AppleCarPlay" in line for line in events), events)
-            self.assertTrue(any("ARMiPhoneIAP2 640 360 20 1" in line for line in events), events)
+            self.assertEqual(any("ARMiPhoneIAP2 640 360 20 1" in line for line in events), expected, events)
             self.assertFalse((root / "iap2-wifi-active").exists())
-            self.assertGreater(int((root / "wireless-attempt").read_text()), 0)
+            if expected:
+                self.assertGreater(int((root / "wireless-attempt").read_text()), 0)
+
+            if allowed and expected:
+                def tick():
+                    subprocess.run(["sh", str(root / "step.sh")], env=env, check=True,
+                                   capture_output=True, timeout=5)
+
+                if replace_receiver:
+                    tick()  # The receiver exited after BT iAP2 started.
+                    self.assertEqual((root / "priority-iap2-rearmed").read_text().strip(), allowed)
+                    self.assertFalse((root / "priority-iap2-failed").exists())
+                    self.assertFalse((root / "priority-iap2-started").exists())
+                    (root / "apple-alive").touch()
+                    tick()  # Resume after the replacement is running.
+                    self.assertEqual((root / "priority-iap2-started").read_text().strip(), allowed)
+                    (root / "apple-alive").unlink()  # A second receiver loss ends the turn.
+                else:
+                    (root / "apple-alive").touch()  # Only the BT helper exited.
+                tick()
+                self.assertEqual((root / "priority-iap2-failed").read_text().strip(), allowed)
+                new_grant = allowed.rsplit("-", 1)[0] + "-2"
+                (root / "priority-carplay").write_text(new_grant + "\n")
+                tick()
+                launches = (root / "events").read_text().count("ARMiPhoneIAP2 640 360 20 1")
+                self.assertEqual(launches, 3 if replace_receiver else 2)
+                self.assertEqual((root / "priority-iap2-started").read_text().strip(), new_grant)
 
 
 @unittest.skipUnless(shutil.which("bwrap"), "needs user-namespace mount fixtures")

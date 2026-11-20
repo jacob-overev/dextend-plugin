@@ -140,19 +140,56 @@ if [ "$restart" = 1 ]; then
     debug 'RECOVERY WIRELESS receiver reset; SDL preserved'
     exit 0
 fi
+# In automatic mode only the scheduled phone may open Bluetooth iAP2.
+# Wi-Fi handover and the active AirPlay session continue independently.
+priority_iap2_allowed() {
+    [ "${YAMAHA_PHONE_AUTO:-0}" = 1 ] || return 0
+    allowed=$(cat priority-carplay 2>/dev/null || echo pending)
+    # A grant is the permitted address plus a unique attempt ID. Outside a
+    # granted turn the supervisor can still discover a new phone via RFCOMM.
+    [ "$allowed" != any ] || return 1
+    node=$(readlink /tmp/rfcomm_IAP2 2>/dev/null) || return 1
+    case "$node" in /dev/rfcomm[0-9]*) ;; *) return 1 ;; esac
+    [ "$(tr a-f A-F <"/sys/class/tty/${node##*/}/address" 2>/dev/null)" = "${allowed%% *}" ]
+}
+# Record the actual child status before the log filter consumes the pipeline.
+run_receiver() {
+    family=$1
+    shift
+    rc=0
+    /tmp/yamaha-sdl/receiver-native --phone-audio "$@" || rc=$?
+    if [ "$family" = iap2 ] && [ "${YAMAHA_PHONE_AUTO:-0}" = 1 ] &&
+        { [ "$rc" = 0 ] || [ "$rc" = 141 ]; } && [ -n "${allowed:-}" ] &&
+        [ "$(cat priority-carplay 2>/dev/null || true)" = "$allowed" ]; then
+        printf '%s\n' "$allowed" >priority-iap2-ended.new
+        mv -f priority-iap2-ended.new priority-iap2-ended
+    fi
+    debug "wireless_process_exit receiver=$family exit=$rc"
+}
 if ! pidof AppleCarPlay >/dev/null; then
     # Same competing receiver guard as the wired launcher.
     for p in $(ps | awk '/phone_link_deamon.sh HiCar start/ && !/awk/ {print $1}'); do
         kill -STOP "$p"
     done
     killall ARMHiCar 2>/dev/null || true
+    # A local receiver replacement also removes its iAP2 helper. Give the
+    # same open BT channel one continuation within its original turn.
+    if [ "${YAMAHA_PHONE_AUTO:-0}" = 1 ] && [ "$ready" != ready ] &&
+        [ "$attempt" != 0 ] && [ ! -f iap2-wifi-request ] && [ ! -f iap2-wifi-active ] &&
+        priority_iap2_allowed && [ "$(cat priority-iap2-started 2>/dev/null || true)" = "$allowed" ] &&
+        [ "$(cat priority-iap2-failed 2>/dev/null || true)" != "$allowed" ] &&
+        [ "$(cat priority-iap2-rearmed 2>/dev/null || true)" != "$allowed" ]; then
+        printf '%s\n' "$allowed" >priority-iap2-rearmed
+        rm -f priority-iap2-started priority-iap2-ended
+        debug 'priority_iap2_resume reason=receiver_replaced'
+    fi
     # A Wi-Fi iAP2 process belongs to the old receiver. Leaving it alive
     # suppresses the Bluetooth iAP2 start below after a disconnected session.
     killall -KILL ARMiPhoneIAP2 2>/dev/null || true
     rm -f phone-state wireless-attempt iap2-wifi-request iap2-wifi-active iap2-wifi-retry iap2-wifi-failures
     attempt=0
     (
-        /tmp/yamaha-sdl/receiver-native --phone-audio /usr/sbin/AppleCarPlay --width 640 --height 360 --fps "$fps" --wireless "$@" 2>&1 |
+        run_receiver carplay /usr/sbin/AppleCarPlay --width 640 --height 360 --fps "$fps" --wireless "$@" 2>&1 |
             debug_receiver carplay
     ) </dev/null &
     echo "$now" >wireless-receiver-at
@@ -160,10 +197,24 @@ if ! pidof AppleCarPlay >/dev/null; then
 fi
 # Transport 1 is the firmware Bluetooth iAP2 medium (/tmp/rfcomm_IAP2).
 # A Wi-Fi station alone is not evidence of a phone; it may be the SSH host.
-if [ ! -f iap2-wifi-active ] && [ ! -f iap2-wifi-request ] && [ -e /tmp/rfcomm_IAP2 ] && ! pidof ARMiPhoneIAP2 >/dev/null; then
+if [ ! -f iap2-wifi-active ] && [ ! -f iap2-wifi-request ] && [ -e /tmp/rfcomm_IAP2 ] && ! pidof ARMiPhoneIAP2 >/dev/null && priority_iap2_allowed; then
+    if [ "${YAMAHA_PHONE_AUTO:-0}" = 1 ]; then
+        if [ "$(cat priority-iap2-started 2>/dev/null || true)" = "$allowed" ]; then
+            # The child exited before handover with the same BT link still
+            # present. Let the supervisor schedule the next attempt.
+            printf '%s\n' "$allowed" >priority-iap2-failed.new
+            mv -f priority-iap2-failed.new priority-iap2-failed
+            exit 0
+        fi
+        if [ "$(cat priority-iap2-rearmed 2>/dev/null || true)" = "$allowed" ] &&
+            ! pidof AppleCarPlay >/dev/null; then
+            exit 0
+        fi
+        printf '%s\n' "$allowed" >priority-iap2-started
+    fi
     if [ "$attempt" = 0 ]; then echo "$now" >wireless-attempt; fi
     (
-        /tmp/yamaha-sdl/receiver-native --phone-audio /usr/sbin/ARMiPhoneIAP2 640 360 "$fps" 1 2>&1 |
+        run_receiver iap2 /usr/sbin/ARMiPhoneIAP2 640 360 "$fps" 1 2>&1 |
             debug_receiver iap2
     ) </dev/null &
     debug "STAGE WIRELESS_IAP2_STARTED fps=$fps"

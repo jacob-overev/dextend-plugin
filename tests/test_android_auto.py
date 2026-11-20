@@ -163,6 +163,48 @@ os.environ.pop("YAMAHA_AA_MODE")
 os.environ.pop("YAMAHA_AA_PEER")
 os.environ.pop("YAMAHA_AA_RFCOMM_PATH")
 
+# A startup video stop can arrive before the navigation screen opens. Allow
+# one request once CCU is ready. An explicit phone focus yield cancels it.
+for initial_control in (501, 3):
+    with tempfile.TemporaryDirectory() as tmp:
+        card = Path(tmp) / "waiting.h264"
+        card.write_bytes(b"\x00\x00\x00\x01\x65waiting")
+        rig = Rig(tmp, markers=True, YAMAHA_AA_MODE="usb", YAMAHA_WAITING_FRAME=str(card),
+                  YAMAHA_SMOOTH_TRANSITIONS="1")
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+                peer.settimeout(5)
+                peer.connect(str(rig.path))
+                peer.sendall(packet(0xF1, struct.pack("<I", 5)))
+                read_exact(peer, 60)
+                peer.sendall(packet(9, struct.pack("<3I", 4, 12, 501)))
+                peer.sendall(packet(9, struct.pack("<3I", 4, 12, initial_control)))
+                assert not select.select([peer], [], [], 2.1)[0]
+                rig.ccu()
+                (Path(tmp) / "ccu-recover").unlink(missing_ok=True)
+                rig.start()
+                if initial_control == 501:
+                    response = read_exact(peer, 28)
+                    assert struct.unpack_from("<3I", response, 16) == (4, 12, 12)
+                    peer.sendall(packet(9, struct.pack("<3I", 4, 12, 501)))
+                    assert not select.select([peer], [], [], 2.2)[0]
+                    picture = packet(9, struct.pack("<II", len(ENCODED_AA), 1) + ENCODED_AA)
+                    peer.sendall(picture)
+                    read_exact(peer, 28)  # The waiting card hands off on a fresh IDR.
+                    peer.sendall(picture)
+                    rig.until(lambda h, p: h[1:3] == bytes([11, 4]))
+                    os.write(rig.master, frame(4, 0, 11, 5, 1))
+                    rig.video_start()
+                    read_exact(peer, 28)
+                    peer.sendall(picture)
+                    rig.until(lambda h, p: h[1] == 11 and (h[0] & 7) == 1 and b"\x00\x00\x00\x01\x67" in p)
+                    assert "IDR_QUEUED" in (Path(tmp) / "projection-events").read_text()
+                else:
+                    assert not select.select([peer], [], [], 2.2)[0]
+        finally:
+            rig.close()
+print("OK: one startup focus request gated by CCU, explicit yield stays in background")
+
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
     source = Path(__file__).resolve().parents[1] / "src/native"

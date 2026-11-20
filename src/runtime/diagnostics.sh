@@ -120,6 +120,11 @@ case "${1:-}" in
         if regular "$d/boot-events"; then head -c 8600 "$d/boot-events"; else printf 'unavailable\n'; fi
         printf '\nEVENTS\n'
         for f in previous events; do regular "$d/$f" && tail -c 33500 "$d/$f"; done
+        printf '\nPROJECTION EVENTS (seconds since boot)\n'
+        projection=/tmp/yamaha-sdl/projection-events
+        if regular "$projection"; then
+            tail -c 8400 "$projection" | awk 'NF == 3 && $1 ~ /^[0-9]+[.][0-9]+$/ && $2 ~ /^(CP|AA)$/ && $3 ~ /^[A-Z_]+$/'
+        fi
         printf '\nUSB AND DRIVER EVENTS\n'
         # Only fixed kernel event categories, not arbitrary kernel messages/identities.
         dmesg 2>/dev/null | awk '

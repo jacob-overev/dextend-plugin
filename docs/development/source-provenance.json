@@ -9,7 +9,7 @@
       "path": "src/native/probe.c",
       "origin": "dongle-sdl/probe.c",
       "import_sha256": "891714b02cacc3d6c2e6188990e5f9b86eb799392c742f2c0a275b6ee1a4218e",
-      "current_sha256": "57216b7cb6b7da23a1dacb47174fb36b8d5c3c8de69449fe9b48910bdd919e36"
+      "current_sha256": "015df4965eadd8fdcc9d6a8ef0281065d3cfc199d69efdee4cf77c6f379f6c28"
     },
     {
       "path": "src/native/iphone-usb-role.c",
@@ -21,13 +21,13 @@
       "path": "src/native/bluetooth-autoconnect.c",
       "origin": "dongle-sdl/bluetooth-autoconnect.c",
       "import_sha256": "2274b0d882f83c6a7b68b640e0e71581abae25dc0e40e26542a771eccbd44958",
-      "current_sha256": "90b927b17b24c22313b85f7204569ef67c1d5c702b4cb09a304d035fe26273dc"
+      "current_sha256": "f8e365666fad23a59abd9642235ee93b641b566d1fc16d1d230652a1ca0049ad"
     },
     {
       "path": "src/native/receiver-native.c",
       "origin": "dongle-sdl/commercial/receiver-native.c",
       "import_sha256": "e7d39ec2a7ac9fa802973a67f5c532c9a3b6bac41d6e4c204d8542dfc4509a09",
-      "current_sha256": "d84424708e888961673b564e13145f3760bf99fed69888773bbe311983134e84"
+      "current_sha256": "adcbdaa78b6b7f92eb0500197a8ceadf89aaf57ca30fc51cce3a468b6a38b224"
     },
     {
       "path": "src/native/third-party/jsmn/jsmn.h",
@@ -81,13 +81,13 @@
       "path": "tests/test_bluetooth_autoconnect.py",
       "origin": "dongle-sdl/test_bluetooth_autoconnect.py",
       "import_sha256": "93d04ab5e8c02e20f12e7e282ea5c51b136df7ffd3a95eda0495946c6b00f7ce",
-      "current_sha256": "e5dab3360b99fb3461dbf07e5e3ea96e3b766ffb116d177ecac765a9ddbedbf3"
+      "current_sha256": "2ca101bb3a976870daf9e3b631e57190abb269818684f292a4e9d8555ef3c1f0"
     },
     {
       "path": "tests/test_receiver_native.py",
       "origin": "dongle-sdl/commercial/test_receiver_native.py",
       "import_sha256": "9d904feaf0872930caa64f7af6de3833cb46832630aad26f95f8fcb8bda44a01",
-      "current_sha256": "c417c7770fb63f0cf5bae0cdc342b410bbf9f262efbc8ce2534a9a0a7cb7b9b4"
+      "current_sha256": "dfbbcac5609cce3e378eca5e4f3c1ec432520b87e22d4356b31e9e04e88922db"
     },
     {
       "path": "tools/build-musl.sh",
@@ -165,7 +165,7 @@
       "path": "src/runtime/supervise-phone.sh",
       "origin": "verified-native-rc2-runtime:supervise-phone.sh",
       "import_sha256": "97ef9feaab0d95dd19c588e7df49e25561df06acfa4a121991dca35dbe3be3fc",
-      "current_sha256": "7ff559a85efdf6a5fd1357f5fe405d70bab1b7206a6cc8492982672d8c205546"
+      "current_sha256": "63e475873f1ae9685e616b3a119055938a6eb7ae6039311d9e580542eab5f198"
     },
     {
       "path": "licenses/GCC-copyright.txt",
@@ -195,7 +195,7 @@
       "path": "src/runtime/wireless-step.sh",
       "origin": "verified-native-rc2-runtime:wireless-step.sh",
       "import_sha256": "40043291f56e6471f046576e0ae539c44efbdd01f8d8f3c7b01a29da7f7eadc3",
-      "current_sha256": "5889ce27e7dd730850378cdc1ce153dd4632d5fd6c5178612266b7e691ff637a"
+      "current_sha256": "c79e9d5c43170f14691af972a11b3c5d094ca087910eb98b1ea090d3906411da"
     },
     {
       "path": "packaging/native-boot.sh.in",

@@ -37,8 +37,10 @@ for args, method in [
     (["--listen"], b"Listen\0"),
     (["--forget", "02:00:00:00:00:01"], b"ForgetBluetoothAddr\0"),
     (["--connect", "02:00:00:00:00:01", "AAP"], b"Connect\0"),
+    (["--connect", "02:00:00:00:00:01", "IAP2"], b"Connect\0"),
+    (["--connect", "02:00:00:00:00:01", "AUTO"], b"Connect\0"),
 ]:
-    for reject in (False, True):
+    for outcome in ("ok", "reject", "lost"):
         with tempfile.TemporaryDirectory() as tmp:
             path = str(Path(tmp) / "bus")
             server = socket.socket(socket.AF_UNIX)
@@ -66,13 +68,20 @@ for args, method in [
                             and b"org.riddle.BluetoothControl\0" in payload
                         )
                         if args and args[0] == "--connect":
-                            assert payload.endswith(struct.pack("<I", 3) + b"AAP\0")
-                            assert b"02:00:00:00:00:01\0" in payload
+                            service = b"" if args[2] == "AUTO" else args[2].encode()
+                            assert b"\x08\x01g\0\x02ss\0" in payload
+                            address = args[1].encode()
+                            body = struct.pack("<I", len(address)) + address + b"\0"
+                            body += bytes(-len(body) % 4)
+                            body += struct.pack("<I", len(service)) + service + b"\0"
+                            assert payload.endswith(body)
                         if args and args[0] == "--forget":
                             assert payload.endswith(struct.pack("<I", 17) + b"02:00:00:00:00:01\0")
                             assert b"\x08\x01g\0\x01s\0" in payload
+                        if outcome == "lost":
+                            return
                         signal = struct.pack("<BBBBIII", 108, 4, 0, 1, 0, 21, 0)
-                        data = signal + response(2, 3 if reject else 2)
+                        data = signal + response(2, 3 if outcome == "reject" else 2)
                         for i in range(0, len(data), 3):
                             s.sendall(data[i : i + 3])
                 except Exception as e:
@@ -89,6 +98,6 @@ for args, method in [
             t.join(2)
             server.close()
             assert not t.is_alive() and not errors, errors
-            assert result.returncode == (5 if reject else 0), result
-            assert (b"accepted=1" in result.stdout) == (not reject)
+            assert result.returncode == {"ok": 0, "reject": 5, "lost": 6}[outcome], result
+            assert (b"accepted=1" in result.stdout) == (outcome == "ok")
 print("OK: fragmented D-Bus replies and signals handled; rejected AutoConnect fails")

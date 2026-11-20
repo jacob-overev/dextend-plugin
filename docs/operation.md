@@ -29,6 +29,10 @@ The Polish labels below can help you find these settings if your panel opens in 
 2. Under Preferowana platforma (Preferred platform), choose Według listy (List order), CarPlay or Android Auto. The adapter tries phones on the selected platform first.
 3. Use ↑ Wyżej (Move up) and ↓ Niżej (Move down) to set the order within a group. Select Zapisz na donglu (Save to adapter). The new order takes effect the next time the adapter connects, and the current session stays active.
 
+After power returns and Bluetooth starts, the adapter automatically tries the first phone in the list. With an empty list, it waits for a phone to initiate pairing. If a phone is out of range or its negotiation fails, the adapter tries the next phone. After the last phone it returns to the first. When an active session ends, the search starts at the top of the list.
+
+After a failed attempt, the adapter waits at least 5, 10, 15, 20, 20 and then 30 seconds before trying the same phone again. Other phones keep their turns. A successful connection resets the delay for that phone. During the wait, you can initiate a connection from your phone. The adapter can accept it as soon as the phone opens its Bluetooth profile and the receiver is free.
+
 ### Debug → Debug / USB Wi-Fi
 
 This tab appears when the service network is available with a separate USB Wi-Fi adapter. The adapter’s built-in Wi-Fi handles regular pairing and projection.

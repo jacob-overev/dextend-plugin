@@ -703,6 +703,13 @@
         "NOTICE"
       ]
     },
+    "tests/test_priority_cycle.py": {
+      "license": "PolyForm-Noncommercial-1.0.0",
+      "notices": [
+        "LICENSE",
+        "NOTICE"
+      ]
+    },
     "tests/test_probe.py": {
       "license": "PolyForm-Noncommercial-1.0.0",
       "notices": [
