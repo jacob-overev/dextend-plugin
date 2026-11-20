@@ -2,14 +2,14 @@
 
 ## Sprawdź adapter
 
-Znajdź model i rocznik motocykla w tabeli zgodności w README. Na adapterze Carlinkit CPC200-CCPA / A15W otwórz **Box Info**. Przetestowaliśmy rewizję sprzętową (**Hardware Version**) `YMA0-WN16-0003` z dwiema wersjami firmware (**Version**): `2025.10.15.1127` i `2026.07.31.1733`. Do obu służy ten sam obraz instalacyjny. Jeśli widzisz inne oznaczenia, przed instalacją sprawdź zgodność swojego egzemplarza.
+Znajdź model i rocznik motocykla w tabeli zgodności w README. Na adapterze Carlinkit CPC200-CCPA / A15W otwórz **Box Info**. Przetestowaliśmy rewizję sprzętową (**Hardware Version**) `YMA0-WN16-0003` z dwiema wersjami firmware (**Version**): `2025.10.15.1127` i `2026.07.31.1733`. Do obu służy ten sam obraz instalacyjny. Na A15W instalator zapisuje numer firmware w raporcie. Obsługa innych wersji wymaga sprawdzenia po uruchomieniu. Skrypt startowy właściciela w `/etc/init.d/rcS` i ustawienia SSH oraz Telnet pozostają na miejscu.
 
 Utrata zasilania podczas instalacji może unieruchomić adapter. Jeśli zależy Ci na odzyskaniu fabrycznego oprogramowania, zachowaj sprawdzoną kopię zapasową. Przywrócenie urządzenia nie zawsze jest możliwe.
 
 ## Przygotuj pendrive
 
-1. Pobierz [obraz instalacyjny A15W_Update.img](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/A15W_Update.img) i [plik kontrolny SHA256SUMS](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/SHA256SUMS).
-2. W katalogu z pobranymi plikami oblicz sumę obrazu. W PowerShellu na Windowsie wpisz `Get-FileHash .\A15W_Update.img -Algorithm SHA256`, na macOS `shasum -a 256 A15W_Update.img`, a na Linuksie `sha256sum A15W_Update.img`. Porównaj wynik z wpisem w `SHA256SUMS`. Jeśli się różnią, przerwij instalację.
+1. Pobierz [obraz instalacyjny A15W_Update.img](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/A15W_Update.img). Do opcjonalnej weryfikacji na komputerze pobierz [plik kontrolny SHA256SUMS](https://github.com/jacob-overev/dextend-plugin/releases/latest/download/SHA256SUMS).
+2. Opcjonalnie sprawdź sumę obrazu przed skopiowaniem. W katalogu z pobranymi plikami oblicz sumę obrazu. W PowerShellu na Windowsie wpisz `Get-FileHash .\A15W_Update.img -Algorithm SHA256`, na macOS `shasum -a 256 A15W_Update.img`, a na Linuksie `sha256sum A15W_Update.img`. Porównaj wynik z wpisem w `SHA256SUMS`. Jeśli się różnią, przerwij instalację.
 3. Skopiuj potrzebne dane z pendrive’a, a następnie sformatuj go jako FAT32. Umieść sam obraz w katalogu głównym, zachowaj nazwę pliku i wysuń pendrive z komputera.
 
 ## Zainstaluj dodatek i sprawdź wynik

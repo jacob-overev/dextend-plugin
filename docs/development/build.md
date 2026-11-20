@@ -29,7 +29,7 @@ When we need a specific sequence number, we pass it as the second argument. It m
 
 ## Image size and free space on the adapter
 
-After each build, we inspect `size_budget` in `usb/install/MANIFEST.json`. The USB image size is `image_bytes`. The compressed package written to flash is `runtime_compressed_bytes`, and the archive unpacked into RAM is `runtime_unpacked_bytes`. The unpacked main archive is limited to 1 MiB and the service bundle to 4 MiB. First installation needs the combined size of the two compressed archives rounded up to KiB, plus 320 KiB of free flash. It also needs at least 16 MiB of RAM according to the installer's own measurement. Release tests verify rejection 1 KiB below the flash threshold and installation exactly at the threshold.
+After each build, we inspect `size_budget` in `usb/install/MANIFEST.json`. The USB image size is `image_bytes`. The compressed package written to flash is `runtime_compressed_bytes`, and the archive unpacked into RAM is `runtime_unpacked_bytes`. The unpacked main archive is limited to 1 MiB and the service bundle to 4 MiB. First installation needs the combined size of the two compressed archives rounded up to KiB, plus 320 KiB and space for the radio configuration backup. The report includes the measured memory and the total required flash space. Release tests verify rejection 1 KiB below the flash threshold and installation exactly at the threshold.
 
 ARM programs use 4 KiB segment alignment to match the adapter's kernel page size and reduce the unpacked archive size. To measure an individual adapter without writing to flash, we use the `probe` image and read `flash_free_kib` in `DEXTEND-RESULT.txt`.
 

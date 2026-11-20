@@ -37,7 +37,6 @@ action() {
     fi
     case "$1" in
         sleep) sleep "$2" ;;
-        kernel) uname -r ;;
         factory-ready) [ -S /var/run/adb-driver ] && [ -d /sys/module/g_android_accessory ] &&
             pidof ARMadb-driver >/dev/null 2>&1 ;;
         cache-get) /usr/sbin/riddleBoxCfg -g BtAudio >/dev/null 2>&1 || true ;;
@@ -81,6 +80,7 @@ action() {
             fi
             ;;
         health)
+            [ ! -f "$runtime/aoa-load-error" ] || return 14
             kill -0 "$2" 2>/dev/null || return 10
             [ -d /sys/module/yamaha_aoa ] || return 11
             [ "$(cat "$runtime/boot.pid" 2>/dev/null)" = "$2" ] || return 12
@@ -124,8 +124,6 @@ fallback() {
 }
 trap fallback EXIT
 trap 'exit 1' HUP INT TERM
-note verify_kernel
-[ "$(action kernel)" = 3.14.52+g94d07bb ]
 note verify_archive
 [ "$(sha256sum "$state/native-runtime.tar.lzma" | awk '{print $1}')" = @RUNTIME_SHA256@ ]
 note unpack_runtime
@@ -220,7 +218,7 @@ while [ "$i" -lt 20 ]; do
             last_health_rc=$health_rc
         fi
         # A dead receiver cannot become healthy by waiting for the timeout.
-        [ "$health_rc" != 10 ] || exit 1
+        case "$health_rc" in 10 | 14) exit 1 ;; esac
     fi
     action sleep 1
     i=$((i + 1))

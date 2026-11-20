@@ -122,15 +122,51 @@ def sequence_from_image(image):
     return int(data.splitlines()[1])
 
 
-def installer_entry(checks):
+def installer_entry(checks, mode, version):
+    worker_sha = next(
+        line.split()[0] for line in checks.decode().splitlines() if line.endswith("  transaction.sh")
+    )
     return f"""#!/bin/sh
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 cd /tmp/update/tmp/dextend
-[ ! -L BUNDLE.sha256 ] && [ "$(sha256sum BUNDLE.sha256 | awk '{{print $1}}')" = {sha(checks)} ] || exit 1
-sha256sum -c BUNDLE.sha256 >/dev/null || exit 1
-sh ./transaction.sh
+bundle_error() {{
+    umask 077
+    mkdir /tmp/dextend-usb-lock 2>/dev/null || exit 1
+    trap 'rmdir /tmp/dextend-usb-lock' EXIT
+    usb=/mnt/UPAN
+    target=$usb/DEXTEND-RESULT.txt
+    [ -d "$usb" ] && [ ! -L /mnt ] && [ ! -L "$usb" ] && [ ! -L "$target" ] || exit 1
+    [ ! -e "$target" ] || [ -f "$target" ] || exit 1
+    grep -q ' /mnt/UPAN vfat rw' /proc/mounts || exit 1
+    if [ -f "$target" ] && grep -q '^DEXTEND USB' "$target"; then
+        archive=$(mktemp -d "$usb/dextend-log.XXXXXX") || exit 1
+        cp "$target" "$archive/DEXTEND-RESULT.txt" && sync || exit 1
+    fi
+    stage=$(mktemp "$usb/.dextend-result.XXXXXX") || exit 1
+    trap 'rm -f "$stage"; rmdir /tmp/dextend-usb-lock' EXIT
+    printf 'DEXTEND USB v2\\noperation={mode}\\nversion={version}\\nresult=REJECTED\\ndetail=%s\\nwrite_started=0\\n' "$1" >"$stage"
+    printf 'step=verify_installer status=failed\\n' >>"$stage"
+    if [ "$1" = DAMAGED_BUNDLE ]; then
+        while read -r expected path; do
+            actual=missing_or_unreadable
+            if [ -f "$path" ] && [ ! -L "$path" ]; then
+                actual=$(sha256sum "$path" | awk '{{print $1}}')
+            fi
+            [ "$actual" = "$expected" ] || printf 'mismatch=%s expected=%s actual=%s\\n' "$path" "$expected" "$actual" >>"$stage"
+        done < BUNDLE.sha256
+    fi
+    mv "$stage" "$target"
+    sync
+    exit 1
+}}
+# The verified worker records progress while checking the rest of the package.
+if [ ! -f transaction.sh ] || [ -L transaction.sh ] || [ "$(sha256sum transaction.sh | awk '{{print $1}}')" != {worker_sha} ]; then
+    [ -f BUNDLE.sha256 ] && [ ! -L BUNDLE.sha256 ] && [ "$(sha256sum BUNDLE.sha256 | awk '{{print $1}}')" = {sha(checks)} ] || bundle_error DAMAGED_BUNDLE_MANIFEST
+    bundle_error DAMAGED_BUNDLE
+fi
+sh ./transaction.sh usb-bundle {sha(checks)}
 # The OEM success path deletes /etc/module_version after finish.sh.
 # Our transaction already installed/restored and verified every persistent file.
 # Stop that path explicitly, keeping factory metadata untouched.
@@ -159,15 +195,6 @@ def installer_inputs():
             re.fullmatch(r"[0-9a-f]{64}", value) for value in item["oem_files"].values()
         ):
             raise ValueError("OEM profiles must specify the same complete file set")
-    hook_checks = 'case "$(cat /etc/software_version)" in\n'
-    for item in profiles:
-        hook_checks += (
-            item["software_version"]
-            + " )\nsha256sum -c - >/dev/null 2>&1 <<'DEXTEND_OEM_HASHES' || exit 1\n"
-        )
-        hook_checks += "".join(f"{v}  {k}\n" for k, v in item["oem_files"].items())
-        hook_checks += "DEXTEND_OEM_HASHES\n;;\n"
-    hook_checks += "*) exit 1;;\nesac"
     hook = (
         """#!/bin/sh
 # Dextend USB v1 entry point; the OEM main service must continue immediately.
@@ -180,10 +207,9 @@ s=/etc/yamaha-sdl/usb-v1
 [ -f "$s/boot.sh" ] && [ ! -L "$s/boot.sh" ] || exit 1
 [ "$(sha256sum "$s/boot.sh" | awk '{print $1}')" = BOOT_HASH ] || exit 1
 cd /
-OEM_CHECKS
 sh "$s/boot.sh" >/dev/null 2>&1 </dev/null &
 exit 0
-""".replace("BOOT_HASH", sha(boot)).replace("OEM_CHECKS", hook_checks)
+""".replace("BOOT_HASH", sha(boot))
     ).encode()
     constants = {
         "restore_0_22_sidecar_sha": profile["restore_0_22_sidecar_sha256"],
@@ -192,6 +218,9 @@ exit 0
         "legacy_hook": profile["legacy_hook_sha256"],
         "hook_sha": sha(hook),
         "boot_sha": sha(boot),
+        "beta1_hook_sha": profile["beta1_hook_sha256"],
+        "beta1_boot_sha": profile["beta1_boot_sha256"],
+        "beta1_restore_sha": profile["beta1_restore_sha256"],
         "v033_hook_sha": profile["usb_v1_0_33_hook_sha256"],
         "v033_boot_sha": profile["usb_v1_0_33_boot_sha256"],
         "recent_hook_sha": profile["recent_usb_v1_hook_sha256"],
@@ -303,7 +332,7 @@ def make_bundle(package, output, version, sequence=None, previous_img=None):
         }
         checks = "".join(f"{sha(v)}  {n}\n" for n, v in sorted(files.items())).encode()
         entries["tmp/dextend/BUNDLE.sha256"] = (checks, 0o600)
-        once = installer_entry(checks)
+        once = installer_entry(checks, mode, version)
         entries["tmp/once.sh"] = (once, 0o755)
         entries["tmp/finish.sh"] = (
             b'#!/bin/sh\nexec sh /tmp/update/tmp/dextend/transaction.sh finish "${1:-1}"\n',
@@ -322,7 +351,7 @@ def make_bundle(package, output, version, sequence=None, previous_img=None):
             "version": version,
             "release_id": release_id,
             "image_sha256": sha(image),
-            "profile": profile["name"],
+            "profile": profile["name"] if mode == "probe" else profile["product"],
             "sequence": sequence,
             "install_strategy": "restore-oem-then-install-fresh" if mode == "install" else None,
             "hardware_validation": "not performed; laboratory candidate",
@@ -369,25 +398,22 @@ def make_bundle(package, output, version, sequence=None, previous_img=None):
 def instructions(mode, version):
     purposes = {
         "probe": "Próba przyjęcia obrazu i raport zgodności. Bez zapisu flash; zapisuje tylko RAM i wynik na pendrivie.",
-        "install": "Pierwsza instalacja na rozpoznanym OEM. Aktualizacja wycofuje najpierw rozpoznaną instalację Dextend, a potem instaluje nową od zera. Ustawienia dodatku zostaną usunięte.",
-        "restore-oem": "Usunięcie rozpoznanego Dextend USB v1 lub native-clean rc2 i znanych narzędzi wifi-usb. Przywraca rcS bez serwisowego SSH. Zachowuje konta, ustawienia, parowania i identyfikatory; nie jest kasowaniem ustawień użytkownika.",
+        "install": "Pierwsza instalacja na A15W. Aktualizacja wycofuje najpierw rozpoznaną instalację Dextend, a potem instaluje nową od zera. Ustawienia dodatku zostaną usunięte.",
+        "restore-oem": "Usunięcie rozpoznanego Dextend USB v1 lub native-clean rc2 i znanych narzędzi wifi-usb. Zachowuje skrypt rcS właściciela. Zachowuje konta, ustawienia, parowania i identyfikatory; nie jest kasowaniem ustawień użytkownika.",
     }
     return f"""DEXTEND {version} / {mode}
 Kandydat laboratoryjny; testy na urządzeniu nie zostały wykonane dla tego obrazu.
 {purposes[mode]}
 
-Profile: A15W, firmware 2026.07.31.1733 lub rozpoznany zestaw 2025.10.15.1127,
-box_version=2, kernel 3.14.52+g94d07bb,
-radio IW416 i konkretne sumy OEM. Sprawdź etykietę Hardware Version YMA0-WN16-0003.
-Inne warianty są odrzucane. Nie wykonuj pełnego flashowania SPI tym plikiem.
-
-Najpierw użyj paczki probe i zachowaj DEXTEND-RESULT.txt do oceny.
+Adapter: A15W. Wersja firmware, architektura i kernel są zapisywane w raporcie.
+Paczka probe jest opcjonalna. Instalacja sprawdza integralność plików dodatku.
 Przed install/restore-oem zachowaj sprawdzoną kopię obecnego urządzenia.
 Na pendrivie FAT32 umieść tylko JEDEN obraz, jako A15W_Update.img w katalogu głównym.
 Nie kopiuj wszystkich trzech obrazów naraz. Sprawdź SHA256SUMS przed użyciem.
 Zasil dongla stabilnym zasilaczem USB poza motocyklem; po starcie włóż pendrive.
 Podczas zapisu nie wyjmuj nośnika ani nie odłączaj zasilania.
-Wynik: DEXTEND-RESULT.txt. FILES_COMMITTED oznacza, że updater jeszcze pracuje.
+Na pendrivie DEXTEND-RESULT.txt zawiera wynik oraz chronologiczny przebieg każdej rozpoczętej fazy instalatora.
+Poprzedni raport jest zachowywany w osobnym katalogu dextend-log.*. FILES_COMMITTED oznacza, że updater jeszcze pracuje.
 PREPARED_FOR_BOOT / OEM_RESTORED_RESTART_REQUIRED oznacza sprawdzony zapis.
 Jeżeli istnieje module_version, detail=EXPECTED_OEM_ERROR_METADATA_PRESERVED_POWER_CYCLE
 oznacza celowe zatrzymanie OEM po zapisie, aby zachować metadane. W tym jednym
@@ -398,13 +424,12 @@ Czas i LED tej nowej paczki wymagają próby sprzętowej; sam kolor nie dowodzi 
 
 Probe oraz ALREADY_INSTALLED celowo kończą once.sh kodem błędu, aby zatrzymać
 kopiowanie OEM. Komunikat błędu OEM jest wtedy spodziewany: sprawdź własny raport.
-REJECTED oznacza odmowę; przeczytaj detail. Nie zmieniaj nazwy firmware/wersji,
-aby ominąć kontrolę. ERROR_AFTER_WRITE lub UPDATER_ERROR_AFTER_COMMIT wymagają sprawdzenia
+REJECTED oznacza odmowę; przeczytaj detail. ERROR_AFTER_WRITE lub UPDATER_ERROR_AFTER_COMMIT wymagają sprawdzenia
 stanu i kopii przed ponowieniem. Nie zakładaj automatycznie cofnięcia zapisu.
 
 Przed zapisem tworzy się na USB katalog dextend-backup.* z before.tar,
 sumą i listą ścieżek. To kopia zmienianych plików, nie całego flash.
-Nie publikuj jej. Brak miejsca, nieznane pliki lub modyfikacje powodują odmowę.
+Nie publikuj jej. Brak miejsca lub konflikt na ścieżce zajmowanej przez dodatek powodują odmowę.
 Instalacja nie zmienia bootloadera, kernela, danych radia ani danych egzemplarza.
 Start zdrowych procesów nie zastępuje sprawdzenia obrazu, sterowania i audio.
 Powrót OEM przestaje uruchamiać serwis przy następnym starcie; bieżące procesy

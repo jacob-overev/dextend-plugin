@@ -14,7 +14,6 @@ fail() {
     echo "AOA_INDEPENDENT ERROR: $*" >&2
     exit 1
 }
-[ "$(uname -r)" = '3.14.52+g94d07bb' ] || fail UNKNOWN_KERNEL
 [ -f AOA.sha256 ] || fail MISSING_MODULE_MANIFEST
 sha256sum -c AOA.sha256 >/dev/null || fail MODULE_HASH_MISMATCH
 driver=/sys/bus/platform/drivers/ci_hdrc
@@ -23,6 +22,8 @@ if [ -d /sys/module/yamaha_aoa ] && [ "${YAMAHA_AOA_RESET:-0}" = 1 ]; then
     [ ! -d /sys/module/yamaha_aoa ] || fail MODULE_IN_USE
 fi
 if [ ! -d /sys/module/yamaha_aoa ]; then
+    # An incompatible module cannot become loadable by retrying this boot.
+    [ ! -f aoa-load-error ] || fail AOA_MODULE_LOAD_FAILED
     # Same vendor worker stop used by the accepted transport; the iPhone
     # controller, network interfaces and pairing stores remain untouched.
     killall -STOP ARMadb-driver 2>/dev/null || true
@@ -31,13 +32,30 @@ if [ ! -d /sys/module/yamaha_aoa ]; then
         [ "$parent" = 1 ] || kill -KILL "$pid" 2>/dev/null || true
     done
     usb=/sys/class/android_usb_accessory/android0
+    previous_enable=$(cat "$usb/enable" 2>/dev/null || true)
+    restore_vendor=0
+    [ ! -d /sys/module/g_android_accessory ] || restore_vendor=1
     [ ! -e "$usb/enable" ] || echo 0 >"$usb/enable"
     [ ! -e "$driver/ci_hdrc.1" ] || echo ci_hdrc.1 >"$driver/unbind"
     if [ -d /sys/module/g_android_accessory ]; then rmmod g_android_accessory; fi
     [ ! -d /sys/module/g_android_accessory ] || fail VENDOR_MODULE_IN_USE
     [ -e "$driver/ci_hdrc.1" ] || echo ci_hdrc.1 >"$driver/bind"
     diag loading_module
-    insmod ./yamaha_aoa.ko experimental=1
+    if ! insmod ./yamaha_aoa.ko experimental=1 2>aoa-insmod.log; then
+        diag "module load: $(head -c 256 aoa-insmod.log)"
+        # Reuse the OEM module staged by the factory startup.
+        if [ "$restore_vendor" = 1 ]; then
+            if ! insmod /tmp/g_android_accessory.ko; then
+                echo OEM_MODULE_RESTORE_FAILED >aoa-load-error
+                fail OEM_MODULE_RESTORE_FAILED
+            fi
+            case "$previous_enable" in 0 | 1)
+                [ ! -e "$usb/enable" ] || echo "$previous_enable" >"$usb/enable" ;;
+            esac
+        fi
+        echo AOA_MODULE_LOAD_FAILED >aoa-load-error
+        fail AOA_MODULE_LOAD_FAILED
+    fi
     diag module_loaded
     [ -d /sys/module/yamaha_aoa ] || fail MODULE_NOT_LOADED
 fi

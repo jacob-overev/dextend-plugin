@@ -68,5 +68,8 @@
       },
       "evidence": "User probe r2; installation path checked against archived stock updater. CarPlay binaries differ from public stock; hardware validation pending."
     }
-  ]
+  ],
+  "beta1_hook_sha256": "ee7c16a2b6bfd68f26c147983f034eb65c98e96c1d6c60ecd3a4b28c3c1654fb",
+  "beta1_boot_sha256": "a4d74e84ea665c8c57aee5d0a79d531b7c68537ca823582714662e1375c7ce32",
+  "beta1_restore_sha256": "cc8b2c93c1fe2a4d5567b5a2718be9edf0eb2c293f5dbe45c608225dc0c39afb"
 }

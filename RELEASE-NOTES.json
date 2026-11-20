@@ -1,10 +1,8 @@
 {
   "pl": [
-    "Pierwsza beta Dextend. Dodatek łączy Apple CarPlay i Android Auto z ekranem motocykla przez adapter Carlinkit CPC200-CCPA / A15W. Oba systemy sprawdziliśmy na Yamasze TRACER 9 GT+ z 2024 roku.",
-    "Dostęp SSH można włączyć w zakładce Debug na czas diagnozy i wybrać klucz publiczny. Domyślnie dostęp jest wyłączony."
+    "Instalator USB zapisuje kolejne etapy do DEXTEND-RESULT.txt na pendrivie. Raport po sukcesie zawiera cały przebieg. Przy ponowieniu instalator zachowuje poprzedni raport w katalogu dextend-log.*."
   ],
   "en": [
-    "First Dextend beta. The plugin connects Apple CarPlay and Android Auto to the motorcycle display through a Carlinkit CPC200-CCPA / A15W adapter. Both systems were tested on a 2024 Yamaha TRACER 9 GT+.",
-    "SSH is off by default. Enable it in the Debug tab and select a public key for a diagnostic session."
+    "The USB installer writes each stage to DEXTEND-RESULT.txt on the drive, including completed installations. A new attempt preserves the previous report in a dextend-log.* directory."
   ]
 }

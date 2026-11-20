@@ -50,8 +50,8 @@ Sprawdzamy pole `size_budget` w `usb/install/MANIFEST.json` po każdej budowie.
 zapisywanego do flash, a `runtime_unpacked_bytes` archiwum rozpakowywanego do RAM.
 Rozpakowane archiwum główne ma limit 1 MiB, a zestaw serwisowy 4 MiB.
 Pierwsza instalacja wymaga wolnego miejsca równego sumie rozmiarów obu
-skompresowanych archiwów zaokrąglonej w górę do KiB plus 320 KiB,
-oraz co najmniej 16 MiB RAM według własnego odczytu. Test wydania sprawdza
+skompresowanych archiwów zaokrąglonej w górę do KiB plus 320 KiB oraz miejsce na zachowanie ustawień radia.
+Raport podaje szacowaną dostępną pamięć RAM. Test wydania sprawdza
 odmowę 1 KiB poniżej progu flash oraz instalację dokładnie przy progu.
 
 Programy ARM linkujemy z wyrównaniem segmentów do 4 KiB, zgodnym z rozmiarem

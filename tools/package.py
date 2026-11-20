@@ -142,7 +142,10 @@ def package(userspace, module, waiting, output, version=None):
             entry.size = len(data)
             entry.mode = 0o700 if name.endswith(".sh") or name in BINS else 0o600
             tar.addfile(entry, io.BytesIO(data))
-    if len(raw.getvalue()) > MAX_RUNTIME:
+        # Keep the two USTAR end blocks. Tape-record padding is optional on disk.
+        archive_size = tar.offset + 2 * tarfile.BLOCKSIZE
+    raw.truncate(archive_size)
+    if archive_size > MAX_RUNTIME:
         raise ValueError("Runtime exceeds the native-boot unpacked limit")
     payload = lzma.compress(
         raw.getvalue(),
